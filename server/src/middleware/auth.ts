@@ -34,4 +34,13 @@ export const requireAuth = (
   }
 };
 
+export const requireRole = (role: string) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.auth || req.auth.role !== role) {
+      return res.status(403).json({ message: "Không đủ quyền truy cập" });
+    }
+    next();
+  };
+};
+
 
