@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power } from 'lucide-react';
+import { Plus, Store, Power, KeyRound } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
   onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
+  onResetRestaurantPassword: (id: string, newPassword: string) => Promise<any>;
   onLogout: () => void;
 }
 
@@ -14,6 +15,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   restaurants,
   onAddRestaurant,
   onToggleActive,
+  onResetRestaurantPassword,
   onLogout
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,9 +27,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     email: '',
     address: '',
     phone: '',
-    status: 'ACTIVE'
+    status: RestaurantStatus.ACTIVE
   };
   const [newRest, setNewRest] = useState<NewRestaurantPayload>(initialForm);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +90,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                     </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setResetTarget({ id: rest.id, name: rest.name })}
+                      title="Đặt lại mật khẩu admin nhà hàng"
+                    >
+                      <KeyRound className="w-4 h-4 text-indigo-500" />
+                    </Button>
                     <Button 
                       variant="secondary" 
                       size="sm" 
@@ -185,6 +199,78 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               <div className="flex justify-end space-x-3 mt-6">
                 <Button variant="secondary" onClick={() => setIsModalOpen(false)} type="button">Hủy</Button>
                 <Button type="submit">Tạo mới</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-4">
+              Đặt lại mật khẩu - {resetTarget.name}
+            </h3>
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!resetPassword || !resetConfirm) {
+                  alert('Vui lòng nhập đủ mật khẩu mới và xác nhận');
+                  return;
+                }
+                if (resetPassword !== resetConfirm) {
+                  alert('Mật khẩu xác nhận không khớp');
+                  return;
+                }
+                try {
+                  setIsResetLoading(true);
+                  await onResetRestaurantPassword(resetTarget.id, resetPassword);
+                  alert('Đã đặt lại mật khẩu cho nhà hàng');
+                  setResetPassword('');
+                  setResetConfirm('');
+                  setResetTarget(null);
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Không thể đặt lại mật khẩu');
+                } finally {
+                  setIsResetLoading(false);
+                }
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mật khẩu mới</label>
+                <input
+                  type="password"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Xác nhận mật khẩu mới</label>
+                <input
+                  type="password"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => {
+                    setResetTarget(null);
+                    setResetPassword('');
+                    setResetConfirm('');
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isResetLoading}>
+                  {isResetLoading ? 'Đang xử lý...' : 'Lưu mật khẩu mới'}
+                </Button>
               </div>
             </form>
           </div>
