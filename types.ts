@@ -5,12 +5,32 @@ export enum Role {
   GUEST = 'GUEST' // Not logged in yet
 }
 
+export enum RestaurantStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE'
+}
+
 export interface Restaurant {
   id: string;
   name: string;
   username: string; // Used for login
-  password: string; // Used for login (simplified for demo)
+  ownerName: string;
+  email: string;
+  address: string;
+  phone: string;
+  status: RestaurantStatus;
   active: boolean;
+}
+
+export interface NewRestaurantPayload {
+  name: string;
+  username: string;
+  password: string;
+  ownerName: string;
+  email: string;
+  address: string;
+  phone: string;
+  status: RestaurantStatus;
 }
 
 export interface MenuItem {

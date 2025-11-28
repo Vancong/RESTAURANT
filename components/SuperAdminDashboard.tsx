@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Restaurant } from '../types';
+import { NewRestaurantPayload, Restaurant, RestaurantStatus } from '../types';
 import { Button } from './Button';
-import { Plus, Trash2, Edit, Store, Power } from 'lucide-react';
+import { Plus, Store, Power } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
-  onAddRestaurant: (r: Omit<Restaurant, 'id'>) => void;
+  onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
   onLogout: () => void;
 }
@@ -17,13 +17,23 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   onLogout
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newRest, setNewRest] = useState({ name: '', username: '', password: '' });
+  const initialForm: NewRestaurantPayload = {
+    name: '',
+    username: '',
+    password: '',
+    ownerName: '',
+    email: '',
+    address: '',
+    phone: '',
+    status: 'ACTIVE'
+  };
+  const [newRest, setNewRest] = useState<NewRestaurantPayload>(initialForm);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddRestaurant({ ...newRest, active: true });
+    onAddRestaurant(newRest);
     setIsModalOpen(false);
-    setNewRest({ name: '', username: '', password: '' });
+    setNewRest(initialForm);
   };
 
   return (
@@ -64,11 +74,15 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                       <div className="flex items-center text-sm text-gray-500">
                          <span className="mr-2">User: {rest.username}</span>
                       </div>
+                      <p className="text-xs text-gray-500">Chủ: {rest.ownerName}</p>
+                      <p className="text-xs text-gray-500">Email: {rest.email}</p>
+                      <p className="text-xs text-gray-500">Địa chỉ: {rest.address}</p>
+                      <p className="text-xs text-gray-500">Liên hệ: {rest.phone}</p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {rest.active ? 'Hoạt động' : 'Tạm khóa'}
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                     </span>
                     <Button 
                       variant="secondary" 
@@ -102,6 +116,25 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700">Tên người chủ</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newRest.ownerName}
+                  onChange={e => setNewRest({ ...newRest, ownerName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email nhà hàng</label>
+                <input
+                  required
+                  type="email"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newRest.email}
+                  onChange={e => setNewRest({ ...newRest, email: e.target.value })}
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700">Tên đăng nhập (Admin nhà hàng)</label>
                 <input 
                   required
@@ -119,6 +152,35 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   value={newRest.password}
                   onChange={e => setNewRest({...newRest, password: e.target.value})}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Địa chỉ nhà hàng</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newRest.address}
+                  onChange={e => setNewRest({ ...newRest, address: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newRest.phone}
+                  onChange={e => setNewRest({ ...newRest, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Trạng thái nhà hàng</label>
+                <select
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newRest.status}
+                  onChange={e => setNewRest({ ...newRest, status: e.target.value as RestaurantStatus })}
+                >
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="INACTIVE">Tạm khóa</option>
+                </select>
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <Button variant="secondary" onClick={() => setIsModalOpen(false)} type="button">Hủy</Button>

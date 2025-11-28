@@ -5,14 +5,22 @@ export const initialRestaurants: Restaurant[] = [
     id: 'rest_001',
     name: 'Phở Gia Truyền 88',
     username: 'admin88',
-    password: '123',
+    ownerName: 'Nguyễn Văn A',
+    email: 'admin88@example.com',
+    address: '88 Lý Thường Kiệt, Hà Nội',
+    phone: '0901 234 567',
+    status: 'ACTIVE',
     active: true
   },
   {
     id: 'rest_002',
     name: 'Burger Phố',
     username: 'burger',
-    password: '123',
+    ownerName: 'Trần Thị B',
+    email: 'burger@example.com',
+    address: '12 Nguyễn Huệ, TP.HCM',
+    phone: '0908 765 432',
+    status: 'ACTIVE',
     active: true
   }
 ];

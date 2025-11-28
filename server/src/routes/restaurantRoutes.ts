@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { Restaurant } from "../models/Restaurant.js";
+import { Restaurant, RestaurantStatus } from "../models/Restaurant.js";
 import { User, UserRole } from "../models/User.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -15,12 +15,35 @@ router.get("/", async (_req, res) => {
 // Tạo nhà hàng mới + tài khoản admin nhà hàng
 router.post("/", async (req, res) => {
   try {
-    const { name, username, password } = req.body;
+    const {
+      name,
+      username,
+      password,
+      ownerName,
+      email,
+      address,
+      phone,
+      status
+    } = req.body;
 
-    if (!name || !username || !password) {
-      return res
-        .status(400)
-        .json({ message: "Thiếu name/username/password khi tạo nhà hàng" });
+    if (
+      !name ||
+      !username ||
+      !password ||
+      !ownerName ||
+      !email ||
+      !address ||
+      !phone ||
+      !status
+    ) {
+      return res.status(400).json({
+        message:
+          "Thiếu thông tin bắt buộc (name, username, password, ownerName, email, address, phone, status)."
+      });
+    }
+
+    if (!Object.values(RestaurantStatus).includes(status as RestaurantStatus)) {
+      return res.status(400).json({ message: "Trạng thái nhà hàng không hợp lệ" });
     }
 
     const existingUser = await User.findOne({ username });
@@ -30,10 +53,18 @@ router.post("/", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const normalizedStatus =
+      status === RestaurantStatus.INACTIVE ? RestaurantStatus.INACTIVE : RestaurantStatus.ACTIVE;
+
     const restaurant = await Restaurant.create({
       name,
       username,
-      active: true
+      ownerName,
+      email,
+      address,
+      phone,
+      status: normalizedStatus,
+      active: normalizedStatus === RestaurantStatus.ACTIVE
     });
 
     await User.create({
@@ -52,11 +83,20 @@ router.post("/", async (req, res) => {
 // Cập nhật nhà hàng (ví dụ toggle active)
 router.patch("/:id", async (req, res) => {
   try {
-    const restaurant = await Restaurant.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    const updates: Record<string, unknown> = { ...req.body };
+
+    if (typeof updates.status === "string") {
+      if (!Object.values(RestaurantStatus).includes(updates.status as RestaurantStatus)) {
+        return res.status(400).json({ message: "Trạng thái nhà hàng không hợp lệ" });
+      }
+      updates.active = updates.status === RestaurantStatus.ACTIVE;
+    } else if (typeof updates.active === "boolean" && updates.status === undefined) {
+      updates.status = updates.active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
+    }
+
+    const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, updates, {
+      new: true
+    });
     if (!restaurant) {
       return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
     }

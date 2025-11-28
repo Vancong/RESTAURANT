@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initialMenu, initialOrders } from './services/mockData';
-import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role } from './types';
+import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role, NewRestaurantPayload, RestaurantStatus } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
@@ -55,12 +55,26 @@ const App: React.FC = () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/restaurants`);
         if (!res.ok) return;
-        const data: { _id: string; name: string; username: string; active: boolean }[] = await res.json();
+        const data: {
+          _id: string;
+          name: string;
+          username: string;
+          ownerName: string;
+          email: string;
+          address: string;
+          phone: string;
+          status: RestaurantStatus;
+          active: boolean;
+        }[] = await res.json();
         const mapped: Restaurant[] = data.map(r => ({
           id: r._id,
           name: r.name,
           username: r.username,
-          password: '', // không dùng password ở FE nữa
+          ownerName: r.ownerName,
+          email: r.email,
+          address: r.address,
+          phone: r.phone,
+          status: r.status,
           active: r.active
         }));
         setRestaurants(mapped);
@@ -123,7 +137,7 @@ const App: React.FC = () => {
     window.location.hash = '';
   };
 
-  const addRestaurant = async (data: Omit<Restaurant, 'id'>) => {
+  const addRestaurant = async (data: NewRestaurantPayload) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/restaurants`, {
         method: 'POST',
@@ -131,7 +145,12 @@ const App: React.FC = () => {
         body: JSON.stringify({
           name: data.name,
           username: data.username,
-          password: data.password
+          password: data.password,
+          ownerName: data.ownerName,
+          email: data.email,
+          address: data.address,
+          phone: data.phone,
+          status: data.status
         })
       });
 
@@ -140,12 +159,26 @@ const App: React.FC = () => {
         throw new Error(body?.message || 'Không thể tạo nhà hàng');
       }
 
-      const created: { _id: string; name: string; username: string; active: boolean } = await res.json();
+      const created: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+      } = await res.json();
       const mapped: Restaurant = {
         id: created._id,
         name: created.name,
         username: created.username,
-        password: '',
+        ownerName: created.ownerName,
+        email: created.email,
+        address: created.address,
+        phone: created.phone,
+        status: created.status,
         active: created.active
       };
 
@@ -160,17 +193,38 @@ const App: React.FC = () => {
     try {
       const current = restaurants.find(r => r.id === id);
       if (!current) return;
+      const nextStatus = !current.active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
       const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !current.active })
+        body: JSON.stringify({ active: !current.active, status: nextStatus })
       });
       if (!res.ok) throw new Error('Không thể cập nhật trạng thái nhà hàng');
-      const updated: { _id: string; name: string; username: string; active: boolean } = await res.json();
+      const updated: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+      } = await res.json();
       setRestaurants(prev =>
         prev.map(r =>
           r.id === id
-            ? { ...r, name: updated.name, username: updated.username, active: updated.active }
+            ? {
+                ...r,
+                name: updated.name,
+                username: updated.username,
+                ownerName: updated.ownerName,
+                email: updated.email,
+                address: updated.address,
+                phone: updated.phone,
+                status: updated.status,
+                active: updated.active
+              }
             : r
         )
       );
