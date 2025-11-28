@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { initialMenu, initialOrders, initialRestaurants } from './services/mockData';
-import { AppState, CartItem, MenuItem, Order, OrderStatus, Restaurant, Role } from './types';
+import { initialMenu, initialOrders } from './services/mockData';
+import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { CustomerView } from './components/CustomerView';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const AUTH_TOKEN_KEY = 'qr_food_order_token';
+
 const App: React.FC = () => {
-  // Central State (Simulating a DB)
-  const [restaurants, setRestaurants] = useState<Restaurant[]>(initialRestaurants);
+  // Central State
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenu);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   
@@ -46,24 +49,69 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Actions
-  const handleLogin = (u: string, p: string) => {
-    if (u === 'admin' && p === 'admin') {
-      setRole(Role.SUPER_ADMIN);
-      setLoginError('');
-      return;
-    }
-    const rest = restaurants.find(r => r.username === u && r.password === p);
-    if (rest) {
-      if (!rest.active) {
-        setLoginError('Tài khoản nhà hàng đã bị khóa.');
-        return;
+  // Load restaurants from backend
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/restaurants`);
+        if (!res.ok) return;
+        const data: { _id: string; name: string; username: string; active: boolean }[] = await res.json();
+        const mapped: Restaurant[] = data.map(r => ({
+          id: r._id,
+          name: r.name,
+          username: r.username,
+          password: '', // không dùng password ở FE nữa
+          active: r.active
+        }));
+        setRestaurants(mapped);
+      } catch (e) {
+        console.error('Không thể tải danh sách nhà hàng từ server', e);
       }
-      setRole(Role.RESTAURANT_ADMIN);
-      setCurrentRestaurantId(rest.id);
+    };
+
+    fetchRestaurants();
+  }, []);
+
+  // Actions
+  const handleLogin = async (username: string, password: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => null);
+        throw new Error(errBody?.message || 'Sai tên đăng nhập hoặc mật khẩu.');
+      }
+
+      const data: {
+        token: string;
+        user: {
+          role: Role;
+          restaurantId: string | null;
+        };
+      } = await response.json();
+
+      localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+
+      if (data.user.role === Role.SUPER_ADMIN) {
+        setRole(Role.SUPER_ADMIN);
+        setCurrentRestaurantId(null);
+      } else if (data.user.role === Role.RESTAURANT_ADMIN && data.user.restaurantId) {
+        setRole(Role.RESTAURANT_ADMIN);
+        setCurrentRestaurantId(data.user.restaurantId);
+      } else {
+        throw new Error('Không xác định được quyền truy cập.');
+      }
+
       setLoginError('');
-    } else {
-      setLoginError('Sai tên đăng nhập hoặc mật khẩu.');
+    } catch (error) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      setRole(Role.GUEST);
+      setCurrentRestaurantId(null);
+      setLoginError(error instanceof Error ? error.message : 'Không thể đăng nhập lúc này.');
     }
   };
 
@@ -71,19 +119,65 @@ const App: React.FC = () => {
     setRole(Role.GUEST);
     setCurrentRestaurantId(null);
     setLoginError('');
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     window.location.hash = '';
   };
 
-  const addRestaurant = (data: Omit<Restaurant, 'id'>) => {
-    const newRest: Restaurant = {
-      ...data,
-      id: `rest_${Date.now()}`
-    };
-    setRestaurants([...restaurants, newRest]);
+  const addRestaurant = async (data: Omit<Restaurant, 'id'>) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/restaurants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          username: data.username,
+          password: data.password
+        })
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể tạo nhà hàng');
+      }
+
+      const created: { _id: string; name: string; username: string; active: boolean } = await res.json();
+      const mapped: Restaurant = {
+        id: created._id,
+        name: created.name,
+        username: created.username,
+        password: '',
+        active: created.active
+      };
+
+      setRestaurants(prev => [mapped, ...prev]);
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'Không thể tạo nhà hàng');
+    }
   };
 
-  const toggleRestaurantStatus = (id: string) => {
-    setRestaurants(restaurants.map(r => r.id === id ? { ...r, active: !r.active } : r));
+  const toggleRestaurantStatus = async (id: string) => {
+    try {
+      const current = restaurants.find(r => r.id === id);
+      if (!current) return;
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !current.active })
+      });
+      if (!res.ok) throw new Error('Không thể cập nhật trạng thái nhà hàng');
+      const updated: { _id: string; name: string; username: string; active: boolean } = await res.json();
+      setRestaurants(prev =>
+        prev.map(r =>
+          r.id === id
+            ? { ...r, name: updated.name, username: updated.username, active: updated.active }
+            : r
+        )
+      );
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'Không thể cập nhật trạng thái nhà hàng');
+    }
   };
 
   const addMenuItem = (data: Omit<MenuItem, 'id'>) => {
