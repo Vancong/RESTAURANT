@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { Table } from "../models/Table.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { AuthRequest, requireAuth } from "../middleware/auth.js";
@@ -9,7 +10,15 @@ const router = Router();
 router.get("/", async (req, res) => {
   const { restaurantId } = req.query as { restaurantId?: string };
 
-  const filter = restaurantId ? { restaurantId } : {};
+  const filter: any = {};
+  if (restaurantId) {
+    if (!mongoose.isValidObjectId(restaurantId)) {
+      return res
+        .status(400)
+        .json({ message: "restaurantId không hợp lệ", restaurantId });
+    }
+    filter.restaurantId = restaurantId;
+  }
   const tables = await Table.find(filter).sort({ createdAt: -1 });
   res.json(tables);
 });

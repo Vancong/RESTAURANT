@@ -6,6 +6,8 @@ import { connectDB } from "./config/db.js";
 import restaurantRoutes from "./routes/restaurantRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
+import menuRoutes from "./routes/menuRoutes.js";
+import categoryRoutes from "./routes/categoryRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +22,8 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/restaurants", restaurantRoutes);
 app.use("/api/tables", tableRoutes);
+app.use("/api/menu", menuRoutes);
+app.use("/api/categories", categoryRoutes);
 
 connectDB().then(() => {
   app.listen(PORT, () => {
