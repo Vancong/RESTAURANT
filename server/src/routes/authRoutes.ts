@@ -218,5 +218,30 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+router.get("/me", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Token không hợp lệ" });
+    }
+
+    const user = await User.findById(req.auth.sub);
+    if (!user) {
+      return res.status(404).json({ message: "User không tồn tại" });
+    }
+
+    return res.json({
+      user: {
+        id: user._id,
+        username: user.username,
+        role: user.role as UserRole,
+        restaurantId: user.restaurantId || null
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Không thể xác thực user" });
+  }
+});
+
 export default router;
 

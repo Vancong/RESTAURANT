@@ -28,7 +28,6 @@ export interface PasswordResetMailParams {
   to: string;
   restaurantName: string;
   ownerName?: string;
-  resetLink: string;
   otp: string;
 }
 
@@ -72,6 +71,70 @@ export const sendPasswordResetEmail = async ({
     from,
     to,
     subject: "Đặt lại mật khẩu tài khoản nhà hàng",
+    text,
+    html
+  });
+};
+
+export interface WelcomeRestaurantMailParams {
+  to: string;
+  restaurantName: string;
+  ownerName?: string;
+  username: string;
+  password: string;
+  dashboardUrl: string;
+}
+
+export const sendNewRestaurantWelcomeEmail = async ({
+  to,
+  restaurantName,
+  ownerName,
+  username,
+  password,
+  dashboardUrl
+}: WelcomeRestaurantMailParams) => {
+  if (!SMTP_HOST) {
+    throw new Error("SMTP_HOST chưa được cấu hình");
+  }
+
+  const from = MAIL_FROM || SMTP_USER || "no-reply@example.com";
+  const greeting = ownerName ? `Anh/chị ${ownerName}` : restaurantName;
+
+  const text = [
+    `Xin chào ${greeting},`,
+    "",
+    "Nhà hàng của bạn đã được kích hoạt trên hệ thống QR Food Order.",
+    "",
+    `Thông tin đăng nhập:`,
+    `- Tên đăng nhập: ${username}`,
+    `- Mật khẩu tạm: ${password}`,
+    "",
+    `Trang quản lý: ${dashboardUrl}`,
+    "",
+    "Vui lòng đăng nhập và đổi mật khẩu ngay tại mục Đổi mật khẩu để đảm bảo an toàn.",
+    "",
+    "Chúc bạn kinh doanh hiệu quả!"
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+      <p>Xin chào <strong>${greeting}</strong>,</p>
+      <p>Nhà hàng của bạn đã được kích hoạt trên hệ thống <strong>QR Food Order</strong>.</p>
+      <p><strong>Thông tin đăng nhập:</strong></p>
+      <ul>
+        <li>Tên đăng nhập: <code>${username}</code></li>
+        <li>Mật khẩu tạm: <code>${password}</code></li>
+      </ul>
+      <p>Trang quản lý: <a href="${dashboardUrl}">${dashboardUrl}</a></p>
+      <p>Vui lòng đăng nhập và đổi mật khẩu ngay tại mục <em>Đổi mật khẩu</em> để đảm bảo an toàn.</p>
+      <p>Chúc bạn kinh doanh hiệu quả!</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Chào mừng nhà hàng mới trên QR Food Order",
     text,
     html
   });

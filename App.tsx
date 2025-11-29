@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [customerTable, setCustomerTable] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string>('');
   const [resetToken, setResetToken] = useState<string | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   // "Routing" based on Hash for the demo
   useEffect(() => {
@@ -62,6 +63,53 @@ const App: React.FC = () => {
     handleHashChange(); // Check on load
 
     return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        setIsBootstrapping(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+        if (!res.ok) {
+          throw new Error('Token không hợp lệ');
+        }
+        const data: {
+          user: {
+            role: Role;
+            restaurantId: string | null;
+          };
+        } = await res.json();
+
+        if (data.user.role === Role.SUPER_ADMIN) {
+          setRole(Role.SUPER_ADMIN);
+          setCurrentRestaurantId(null);
+        } else if (data.user.role === Role.RESTAURANT_ADMIN && data.user.restaurantId) {
+          setRole(Role.RESTAURANT_ADMIN);
+          setCurrentRestaurantId(data.user.restaurantId);
+        } else {
+          throw new Error('Không xác định được quyền truy cập.');
+        }
+        setLoginError('');
+      } catch {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        setRole(Role.GUEST);
+        setCurrentRestaurantId(null);
+      } finally {
+        setIsBootstrapping(false);
+      }
+    };
+
+    bootstrapAuth();
   }, []);
 
   // Load restaurants from backend
@@ -410,6 +458,10 @@ const App: React.FC = () => {
         }}
       />
     );
+  }
+
+  if (isBootstrapping) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Đang tải...</div>;
   }
 
   // Render Logic

@@ -110,10 +110,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, error, onRequestPasswordR
           </button>
         </div>
         
-        <div className="mt-6 text-center text-xs text-gray-400">
-          <p>Mặc định: Super Admin (admin/admin)</p>
-          <p>Nhà hàng mẫu: admin88/123</p>
-        </div>
+        
       </div>
 
       {isForgotOpen && (
