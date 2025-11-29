@@ -55,32 +55,36 @@ router.post("/", async (req, res) => {
     customerName: customerName?.trim()
   });
 
-  // Gửi email thông báo đơn hàng mới cho chủ quán
-  try {
-    const restaurant = await Restaurant.findById(restaurantId);
-    if (restaurant && restaurant.email) {
-      await sendNewOrderNotification({
-        to: restaurant.email,
-        restaurantName: restaurant.name,
-        ownerName: restaurant.ownerName,
-        orderId: order._id.toString(),
-        tableNumber,
-        items: items.map(item => ({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity
-        })),
-        totalAmount,
-        note,
-        orderTime: order.createdAt || new Date()
-      });
-    }
-  } catch (emailError) {
-    // Không làm gián đoạn việc tạo đơn hàng nếu gửi email thất bại
-    console.error("Không thể gửi email thông báo đơn hàng mới", emailError);
-  }
-
+  // Trả response ngay lập tức để khách hàng nhận được xác nhận nhanh
   res.status(201).json(order);
+
+  // Gửi email thông báo đơn hàng mới cho chủ quán ở background (không chặn response)
+  // Fire and forget - không await để không làm chậm response
+  (async () => {
+    try {
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (restaurant && restaurant.email) {
+        await sendNewOrderNotification({
+          to: restaurant.email,
+          restaurantName: restaurant.name,
+          ownerName: restaurant.ownerName,
+          orderId: order._id.toString(),
+          tableNumber,
+          items: items.map(item => ({
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity
+          })),
+          totalAmount,
+          note,
+          orderTime: order.createdAt || new Date()
+        });
+      }
+    } catch (emailError) {
+      // Không làm gián đoạn việc tạo đơn hàng nếu gửi email thất bại
+      console.error("Không thể gửi email thông báo đơn hàng mới", emailError);
+    }
+  })();
 });
 
 // Lấy đơn hàng theo restaurantId và tableNumber (cho khách xem)
