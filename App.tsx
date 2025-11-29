@@ -86,6 +86,11 @@ const App: React.FC = () => {
     fetchRestaurants();
   }, []);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // Actions
   const handleLogin = async (username: string, password: string) => {
     try {
@@ -141,7 +146,10 @@ const App: React.FC = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/restaurants`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({
           name: data.name,
           username: data.username,
@@ -196,7 +204,10 @@ const App: React.FC = () => {
       const nextStatus = !current.active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
       const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({ active: !current.active, status: nextStatus })
       });
       if (!res.ok) throw new Error('Không thể cập nhật trạng thái nhà hàng');
@@ -231,6 +242,30 @@ const App: React.FC = () => {
     } catch (e) {
       console.error(e);
       alert(e instanceof Error ? e.message : 'Không thể cập nhật trạng thái nhà hàng');
+    }
+  };
+
+  const resetRestaurantPassword = async (id: string, newPassword: string) => {
+    try {
+      if (!newPassword) {
+        throw new Error('Vui lòng nhập mật khẩu mới');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({ newPassword })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể đặt lại mật khẩu');
+      }
+      alert('Đã đặt lại mật khẩu cho admin nhà hàng.');
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : 'Không thể đặt lại mật khẩu');
     }
   };
 
@@ -291,6 +326,7 @@ const App: React.FC = () => {
         restaurants={restaurants}
         onAddRestaurant={addRestaurant}
         onToggleActive={toggleRestaurantStatus}
+        onResetPassword={resetRestaurantPassword}
         onLogout={handleLogout}
       />
     );

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power } from 'lucide-react';
+import { Plus, Store, Power, KeyRound } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
   onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
+  onResetPassword: (id: string, password: string) => void;
   onLogout: () => void;
 }
 
@@ -14,9 +15,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   restaurants,
   onAddRestaurant,
   onToggleActive,
+  onResetPassword,
   onLogout
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const initialForm: NewRestaurantPayload = {
     name: '',
     username: '',
@@ -28,12 +31,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     status: 'ACTIVE'
   };
   const [newRest, setNewRest] = useState<NewRestaurantPayload>(initialForm);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAddRestaurant(newRest);
     setIsModalOpen(false);
     setNewRest(initialForm);
+  };
+
+  const openResetModal = (restaurant: Restaurant) => {
+    setResetTarget({ id: restaurant.id, name: restaurant.name });
+    setResetPassword('');
+    setIsResetModalOpen(true);
+  };
+
+  const handleResetSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    onResetPassword(resetTarget.id, resetPassword);
+    setIsResetModalOpen(false);
+    setResetPassword('');
+    setResetTarget(null);
   };
 
   return (
@@ -84,6 +104,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                     </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openResetModal(rest)}
+                      title="Đặt lại mật khẩu admin"
+                    >
+                      <KeyRound className="w-4 h-4 text-indigo-500" />
+                    </Button>
                     <Button 
                       variant="secondary" 
                       size="sm" 
@@ -185,6 +213,42 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               <div className="flex justify-end space-x-3 mt-6">
                 <Button variant="secondary" onClick={() => setIsModalOpen(false)} type="button">Hủy</Button>
                 <Button type="submit">Tạo mới</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {isResetModalOpen && resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-4">
+              Đặt lại mật khẩu cho <span className="text-brand-600">{resetTarget.name}</span>
+            </h3>
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mật khẩu mới</label>
+                <input
+                  required
+                  type="password"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={resetPassword}
+                  onChange={e => setResetPassword(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setIsResetModalOpen(false);
+                    setResetTarget(null);
+                  }}
+                  type="button"
+                >
+                  Hủy
+                </Button>
+                <Button type="submit">Cập nhật</Button>
               </div>
             </form>
           </div>
