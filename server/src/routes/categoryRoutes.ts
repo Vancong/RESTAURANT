@@ -42,6 +42,39 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// Admin nhà hàng cập nhật danh mục
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const restaurantId = req.auth?.restaurantId;
+  if (!restaurantId) {
+    return res
+      .status(403)
+      .json({ message: "Chỉ admin nhà hàng mới được cập nhật danh mục" });
+  }
+
+  const { name } = req.body as { name?: string };
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: "Thiếu tên danh mục" });
+  }
+
+  try {
+    const updated = await Category.findOneAndUpdate(
+      { _id: req.params.id, restaurantId },
+      { name: name.trim() },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Không tìm thấy danh mục" });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    return res
+      .status(400)
+      .json({ message: "Không thể cập nhật danh mục (có thể tên đã tồn tại)", error });
+  }
+});
+
 // Admin nhà hàng xóa danh mục
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const restaurantId = req.auth?.restaurantId;

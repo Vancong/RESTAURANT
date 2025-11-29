@@ -42,6 +42,10 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [tables, setTables] = useState<{ id: string; code: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [isSavingMenuItem, setIsSavingMenuItem] = useState(false);
   const [deletingMenuId, setDeletingMenuId] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -337,6 +341,63 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
     fetchCategories();
   }, [restaurant.id]);
 
+  const handleUpdateCategory = async (categoryId: string) => {
+    if (!editingCategoryName.trim()) {
+      alert('Vui lòng nhập tên danh mục');
+      return;
+    }
+    try {
+      setIsSavingCategory(true);
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Vui lòng đăng nhập lại.');
+      const res = await fetch(`${API_BASE_URL}/api/categories/${categoryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: editingCategoryName.trim() })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể cập nhật danh mục');
+      }
+      setEditingCategory(null);
+      setEditingCategoryName('');
+      await fetchCategories();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật danh mục');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa danh mục này? Các món trong danh mục này sẽ không bị xóa.')) {
+      return;
+    }
+    try {
+      setDeletingCategoryId(categoryId);
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Vui lòng đăng nhập lại.');
+      const res = await fetch(`${API_BASE_URL}/api/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể xóa danh mục');
+      }
+      await fetchCategories();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể xóa danh mục');
+    } finally {
+      setDeletingCategoryId(null);
+    }
+  };
+
   const fetchStaff = async () => {
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -366,6 +427,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
     const handleCreate = async (e: React.FormEvent) => {
       e.preventDefault();
+      e.stopPropagation(); // Ngăn form submit mặc định
       if (!name.trim()) return;
       try {
         setLoading(true);
@@ -383,7 +445,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
         if (!res.ok) {
           throw new Error(body?.message || 'Không thể tạo danh mục');
         }
-        setName('');
+        setName(''); // Chỉ clear sau khi thành công
         onCreated();
       } catch (err) {
         alert(err instanceof Error ? err.message : 'Không thể tạo danh mục');
@@ -402,11 +464,12 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             placeholder="VD: Món Chính, Đồ Uống..."
             value={name}
             onChange={e => setName(e.target.value)}
+            disabled={loading}
           />
           <Button 
             type="submit" 
             size="sm" 
-            disabled={loading}
+            disabled={loading || !name.trim()}
             className="px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
           >
             <Plus className="w-4 h-4 mr-1" />
@@ -1139,7 +1202,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 </div>
                </div>
 
-               {/* Cột danh mục - Redesigned */}
+               {/* Cột danh mục - Redesigned với chức năng sửa/xóa */}
                <div className="lg:col-span-1">
                  <div className="bg-gradient-to-br from-white via-white to-orange-50/30 rounded-2xl shadow-xl border border-orange-100 p-6 sticky top-4">
                    <div className="flex items-center mb-4">
@@ -1155,9 +1218,70 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                        categories.map(cat => (
                          <li 
                            key={cat.id} 
-                           className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all duration-200"
+                           className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all duration-200 group"
                          >
-                           <span className="text-sm font-medium text-gray-700">{cat.name}</span>
+                           {editingCategory?.id === cat.id ? (
+                             <div className="flex items-center gap-2 flex-1">
+                               <input
+                                 type="text"
+                                 className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
+                                 value={editingCategoryName}
+                                 onChange={e => setEditingCategoryName(e.target.value)}
+                                 onKeyDown={e => {
+                                   if (e.key === 'Enter') {
+                                     handleUpdateCategory(cat.id);
+                                   } else if (e.key === 'Escape') {
+                                     setEditingCategory(null);
+                                     setEditingCategoryName('');
+                                   }
+                                 }}
+                                 autoFocus
+                               />
+                               <button
+                                 onClick={() => handleUpdateCategory(cat.id)}
+                                 disabled={isSavingCategory || !editingCategoryName.trim()}
+                                 className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
+                                 title="Lưu"
+                               >
+                                 <CheckCircle className="w-4 h-4" />
+                               </button>
+                               <button
+                                 onClick={() => {
+                                   setEditingCategory(null);
+                                   setEditingCategoryName('');
+                                 }}
+                                 disabled={isSavingCategory}
+                                 className="p-1 text-gray-400 hover:text-gray-600"
+                                 title="Hủy"
+                               >
+                                 <X className="w-4 h-4" />
+                               </button>
+                             </div>
+                           ) : (
+                             <>
+                               <span className="text-sm font-medium text-gray-700 flex-1">{cat.name}</span>
+                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <button
+                                   onClick={() => {
+                                     setEditingCategory(cat);
+                                     setEditingCategoryName(cat.name);
+                                   }}
+                                   className="p-1 text-blue-600 hover:text-blue-700"
+                                   title="Sửa"
+                                 >
+                                   <Edit className="w-4 h-4" />
+                                 </button>
+                                 <button
+                                   onClick={() => handleDeleteCategory(cat.id)}
+                                   disabled={deletingCategoryId === cat.id}
+                                   className="p-1 text-red-600 hover:text-red-700 disabled:opacity-50"
+                                   title="Xóa"
+                                 >
+                                   <Trash className="w-4 h-4" />
+                                 </button>
+                               </div>
+                             </>
+                           )}
                          </li>
                        ))
                      )}
