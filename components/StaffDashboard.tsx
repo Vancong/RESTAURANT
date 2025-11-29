@@ -42,7 +42,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         timestamp: new Date(o.createdAt).getTime(),
         note: o.note,
         customerName: o.customerName,
-        confirmedByName: o.confirmedByName
+        confirmedByName: o.confirmedByName,
+        updatedByName: o.updatedByName
       }));
       setOrders(mapped);
     } catch (err) {
@@ -142,9 +143,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                       <span className="text-gray-400 text-xs">
                         {new Date(order.timestamp).toLocaleTimeString()}
                       </span>
-                      {order.status === OrderStatus.CONFIRMED && order.confirmedByName && (
+                      {order.updatedByName && (
                         <span className="text-xs text-gray-500">
-                          Đã xác nhận bởi: <span className="font-semibold text-brand-600">{order.confirmedByName}</span>
+                          {order.status === OrderStatus.CONFIRMED ? 'Xác nhận' : 
+                           order.status === OrderStatus.SERVED ? 'Ra món' :
+                           order.status === OrderStatus.COMPLETED ? 'Thanh toán' :
+                           order.status === OrderStatus.CANCELLED ? 'Hủy' : 'Cập nhật'} bởi: <span className="font-semibold text-brand-600">{order.updatedByName}</span>
                         </span>
                       )}
                     </div>

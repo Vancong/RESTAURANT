@@ -209,7 +209,8 @@ const App: React.FC = () => {
           timestamp: new Date(o.createdAt).getTime(),
           note: o.note,
           customerName: o.customerName,
-          confirmedByName: o.confirmedByName
+          confirmedByName: o.confirmedByName,
+          updatedByName: o.updatedByName
         }));
         setOrders(mapped);
       } catch (e) {
@@ -483,6 +484,10 @@ const App: React.FC = () => {
   };
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    // Cập nhật local state ngay để UI responsive
+    setOrders(prev => prev.map(o => 
+      o.id === orderId ? { ...o, status } : o
+    ));
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
@@ -501,12 +506,13 @@ const App: React.FC = () => {
         throw new Error(body?.message || 'Không thể cập nhật đơn hàng');
       }
       const updated = await res.json();
-      setOrders(orders.map(o => 
+      setOrders(prev => prev.map(o => 
         o.id === orderId 
           ? { 
               ...o, 
               status: updated.status as OrderStatus,
-              confirmedByName: updated.confirmedByName
+              confirmedByName: updated.confirmedByName,
+              updatedByName: updated.updatedByName
             } 
           : o
       ));

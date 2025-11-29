@@ -73,6 +73,7 @@ export interface Order {
   note?: string;
   customerName?: string; // Tên khách hàng
   confirmedByName?: string; // Tên nhân viên đã xác nhận đơn
+  updatedByName?: string; // Tên người cập nhật đơn hàng (bất kỳ trạng thái nào)
 }
 
 export interface CartItem extends OrderItem {}
