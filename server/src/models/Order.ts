@@ -8,6 +8,11 @@ export enum OrderStatus {
   CANCELLED = "CANCELLED"
 }
 
+export enum PaymentMethod {
+  CASH = "CASH", // Tiền mặt
+  BANK_TRANSFER = "BANK_TRANSFER" // Chuyển khoản
+}
+
 export interface IOrderItem {
   menuItemId: string;
   name: string;
@@ -23,6 +28,7 @@ export interface IOrder extends Document {
   status: OrderStatus;
   note?: string;
   customerName?: string; // Tên khách hàng
+  paymentMethod?: PaymentMethod; // Hình thức thanh toán
   confirmedBy?: Types.ObjectId; // ID nhân viên đã xác nhận đơn
   confirmedByName?: string; // Tên nhân viên đã xác nhận (để hiển thị nhanh)
   updatedBy?: Types.ObjectId; // ID người cập nhật đơn hàng (bất kỳ trạng thái nào)
@@ -72,6 +78,11 @@ const OrderSchema = new Schema<IOrder>(
     customerName: {
       type: String,
       trim: true
+    },
+    paymentMethod: {
+      type: String,
+      enum: Object.values(PaymentMethod),
+      required: false
     },
     confirmedBy: {
       type: Schema.Types.ObjectId,

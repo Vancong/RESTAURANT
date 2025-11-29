@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { User, UserRole } from "../models/User.js";
-import { Order, OrderStatus } from "../models/Order.js";
+import { Order, OrderStatus, PaymentMethod } from "../models/Order.js";
 import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
 import mongoose from "mongoose";
 
@@ -100,7 +100,7 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
   const userId = req.auth?.sub;
   const userRole = req.auth?.role;
   const { id } = req.params;
-  const { status } = req.body as { status?: string };
+  const { status, paymentMethod } = req.body as { status?: string; paymentMethod?: string };
 
   if (!restaurantId) {
     return res.status(403).json({ message: "Không xác định được nhà hàng" });
@@ -142,6 +142,15 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
   }
 
   const updateData: any = { status: status as OrderStatus };
+  
+  // Lưu hình thức thanh toán khi hoàn thành đơn hàng
+  if (status === OrderStatus.COMPLETED && paymentMethod) {
+    if (paymentMethod === "CASH" || paymentMethod === "BANK_TRANSFER") {
+      updateData.paymentMethod = paymentMethod;
+    } else {
+      return res.status(400).json({ message: "Hình thức thanh toán không hợp lệ" });
+    }
+  }
   
   // Lưu thông tin người cập nhật cho mọi trạng thái
   if (userId) {
