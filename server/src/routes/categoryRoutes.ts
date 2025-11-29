@@ -58,7 +58,10 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
   try {
     const updated = await Category.findOneAndUpdate(
-      { _id: req.params.id, restaurantId },
+      {
+        _id: req.params.id,
+        restaurantId
+      },
       { name: name.trim() },
       { new: true, runValidators: true }
     );
@@ -67,11 +70,12 @@ router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: "Không tìm thấy danh mục" });
     }
 
-    return res.json(updated);
-  } catch (error) {
-    return res
-      .status(400)
-      .json({ message: "Không thể cập nhật danh mục (có thể tên đã tồn tại)", error });
+    res.json(updated);
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Tên danh mục đã tồn tại" });
+    }
+    return res.status(400).json({ message: "Không thể cập nhật danh mục", error });
   }
 });
 

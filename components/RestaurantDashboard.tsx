@@ -3,7 +3,7 @@ import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStat
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users as UsersIcon, XCircle as XCircleIcon, Activity, Award, Zap } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users as UsersIcon, XCircle as XCircleIcon, Activity, Award, Zap, Tag, FolderOpen, FileText, Image, Upload, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -33,6 +33,8 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'bank' | 'settings'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
+  const [priceDisplay, setPriceDisplay] = useState<string>('');
+  const [editingPriceDisplay, setEditingPriceDisplay] = useState<string>('');
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
@@ -42,9 +44,8 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [tables, setTables] = useState<{ id: string; code: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-  const [editingCategory, setEditingCategory] = useState<{ id: string; name: string } | null>(null);
-  const [editingCategoryName, setEditingCategoryName] = useState('');
-  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState<string>('');
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [isSavingMenuItem, setIsSavingMenuItem] = useState(false);
   const [deletingMenuId, setDeletingMenuId] = useState<string | null>(null);
@@ -146,6 +147,21 @@ const AUTH_TOKEN_KEY = 'qr_food_order_token';
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
+// Helper function để format giá tiền theo định dạng Việt Nam (dấu phẩy ngăn cách)
+const formatPrice = (price: number | string): string => {
+  const num = typeof price === 'string' ? parseFloat(price) : price;
+  if (isNaN(num)) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+};
+
+// Helper function để parse giá từ string đã format về number (loại bỏ dấu phẩy)
+const parsePrice = (priceString: string): number => {
+  // Loại bỏ tất cả dấu phẩy và khoảng trắng
+  const cleaned = priceString.replace(/[,\s]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
   // Stats Logic (legacy - for backward compatibility)
   const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
   const revenue = completedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -191,8 +207,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
   const handleSubmitMenu = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.name || !newItem.price) {
-      alert('Vui lòng nhập tên món và giá');
+    const parsedPrice = priceDisplay ? parsePrice(priceDisplay) : (newItem.price || 0);
+    if (!newItem.name || !parsedPrice || parsedPrice <= 0) {
+      alert('Vui lòng nhập tên món và giá hợp lệ');
       return;
     }
     try {
@@ -200,13 +217,14 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
       await onAddMenuItem({
         restaurantId: restaurant.id,
         name: newItem.name,
-        price: Number(newItem.price),
+        price: parsedPrice,
         description: newItem.description || '',
         category: newItem.category || 'Món Chính',
         imageUrl: newItem.imageUrl || `https://picsum.photos/400/300?random=${Date.now()}`,
         available: true
       });
       setNewItem({ category: 'Món Chính', available: true, name: '', price: 0, description: '' });
+      setPriceDisplay('');
       alert("Đã thêm món thành công!");
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Không thể thêm món');
@@ -341,56 +359,64 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
     fetchCategories();
   }, [restaurant.id]);
 
-  const handleUpdateCategory = async (categoryId: string) => {
-    if (!editingCategoryName.trim()) {
-      alert('Vui lòng nhập tên danh mục');
-      return;
-    }
+  const updateCategory = async (id: string, newName: string) => {
     try {
-      setIsSavingCategory(true);
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) throw new Error('Vui lòng đăng nhập lại.');
-      const res = await fetch(`${API_BASE_URL}/api/categories/${categoryId}`, {
+      
+      const res = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ name: editingCategoryName.trim() })
+        body: JSON.stringify({ name: newName.trim() })
       });
+      
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(body?.message || 'Không thể cập nhật danh mục');
       }
-      setEditingCategory(null);
+      
+      setEditingCategoryId(null);
       setEditingCategoryName('');
-      await fetchCategories();
+      fetchCategories();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Không thể cập nhật danh mục');
-    } finally {
-      setIsSavingCategory(false);
+      throw err;
     }
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa danh mục này? Các món trong danh mục này sẽ không bị xóa.')) {
+  const deleteCategory = async (id: string, categoryName: string) => {
+    // Kiểm tra xem có món nào trong danh mục này không
+    const itemsInCategory = menu.filter(item => item.category === categoryName);
+    if (itemsInCategory.length > 0) {
+      alert(`Không thể xóa danh mục "${categoryName}" vì có ${itemsInCategory.length} món đang sử dụng danh mục này. Vui lòng chuyển các món sang danh mục khác trước.`);
       return;
     }
+
+    if (!window.confirm(`Bạn có chắc muốn xóa danh mục "${categoryName}"?`)) {
+      return;
+    }
+
     try {
-      setDeletingCategoryId(categoryId);
+      setDeletingCategoryId(id);
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) throw new Error('Vui lòng đăng nhập lại.');
-      const res = await fetch(`${API_BASE_URL}/api/categories/${categoryId}`, {
+      
+      const res = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
+      
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.message || 'Không thể xóa danh mục');
       }
-      await fetchCategories();
+      
+      fetchCategories();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Không thể xóa danh mục');
     } finally {
@@ -424,57 +450,161 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
   const CategoryCreator: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>('');
+
+    // Kiểm tra danh mục trùng (không phân biệt hoa thường)
+    const normalizedName = name.trim().toLowerCase();
+    const isDuplicate = categories.some(
+      cat => cat.name.trim().toLowerCase() === normalizedName
+    );
+    const isValid = name.trim() && !isDuplicate;
 
     const handleCreate = async (e: React.FormEvent) => {
       e.preventDefault();
-      e.stopPropagation(); // Ngăn form submit mặc định
-      if (!name.trim()) return;
+      setError('');
+      
+      const trimmedName = name.trim();
+      
+      // Validation
+      if (!trimmedName) {
+        setError('Vui lòng nhập tên danh mục');
+        return;
+      }
+
+      // Kiểm tra trùng
+      const normalizedTrimmed = trimmedName.toLowerCase();
+      const duplicate = categories.find(
+        cat => cat.name.trim().toLowerCase() === normalizedTrimmed
+      );
+      
+      if (duplicate) {
+        setError(`Danh mục "${duplicate.name}" đã tồn tại!`);
+        return;
+      }
+
       try {
         setLoading(true);
+        setError('');
         const token = localStorage.getItem(AUTH_TOKEN_KEY);
         if (!token) throw new Error('Vui lòng đăng nhập lại.');
+        
         const res = await fetch(`${API_BASE_URL}/api/categories`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify({ name: name.trim() })
+          body: JSON.stringify({ name: trimmedName })
         });
+        
         const body = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(body?.message || 'Không thể tạo danh mục');
+          // Kiểm tra nếu server trả về lỗi trùng
+          const errorMsg = body?.message || 'Không thể tạo danh mục';
+          if (errorMsg.toLowerCase().includes('đã tồn tại') || errorMsg.toLowerCase().includes('duplicate') || errorMsg.toLowerCase().includes('exists')) {
+            setError(`Danh mục "${trimmedName}" đã tồn tại!`);
+          } else {
+            throw new Error(errorMsg);
+          }
+          return;
         }
-        setName(''); // Chỉ clear sau khi thành công
+        
+        setName('');
+        setError('');
         onCreated();
       } catch (err) {
-        alert(err instanceof Error ? err.message : 'Không thể tạo danh mục');
+        const errorMessage = err instanceof Error ? err.message : 'Không thể tạo danh mục';
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
     };
 
+    // Reset error khi người dùng nhập
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setName(e.target.value);
+      if (error) setError('');
+    };
+
     return (
-      <form onSubmit={handleCreate} className="space-y-2 pt-4 border-t border-gray-200">
-        <label className="block text-sm font-semibold text-gray-700 mb-2">Thêm danh mục mới</label>
+      <form onSubmit={handleCreate} className="space-y-3 pt-4 border-t border-gray-200">
+        <label className="block text-sm font-semibold text-gray-700 mb-2">
+          Thêm danh mục mới
+        </label>
+        
+        <div className="space-y-2">
         <div className="flex space-x-2">
+            <div className="flex-1 relative">
           <input
             type="text"
-            className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white"
+                className={`flex-1 w-full border-2 rounded-xl px-4 py-2.5 text-sm focus:ring-4 transition-all duration-200 bg-white ${
+                  error || isDuplicate
+                    ? 'border-red-300 focus:border-red-500 focus:ring-red-100'
+                    : isValid
+                    ? 'border-green-300 focus:border-brand-500 focus:ring-brand-100'
+                    : 'border-gray-200 focus:border-brand-500 focus:ring-brand-100'
+                }`}
             placeholder="VD: Món Chính, Đồ Uống..."
             value={name}
-            onChange={e => setName(e.target.value)}
-            disabled={loading}
-          />
-          <Button 
-            type="submit" 
-            size="sm" 
-            disabled={loading || !name.trim()}
-            className="px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            {loading ? 'Đang thêm' : 'Thêm'}
+                onChange={handleNameChange}
+                disabled={loading}
+              />
+              {isValid && !error && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                </div>
+              )}
+              {(isDuplicate || error) && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <XCircle className="w-5 h-5 text-red-500" />
+                </div>
+              )}
+            </div>
+            <Button 
+              type="submit" 
+              size="sm" 
+              disabled={loading || !isValid || isDuplicate}
+              className="px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  Đang thêm
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Thêm
+                </>
+              )}
           </Button>
+          </div>
+          
+          {/* Hiển thị thông báo lỗi hoặc cảnh báo */}
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl animate-fade-in">
+              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-700 font-medium">{error}</p>
+            </div>
+          )}
+          
+          {isDuplicate && !error && (
+            <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-xl animate-fade-in">
+              <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-orange-700 font-medium">
+                Danh mục "{categories.find(cat => cat.name.trim().toLowerCase() === normalizedName)?.name}" đã tồn tại!
+              </p>
+            </div>
+          )}
+          
+          {isValid && !error && !isDuplicate && (
+            <div className="flex items-start gap-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-green-700 font-medium">
+                Sẵn sàng thêm danh mục mới
+              </p>
+            </div>
+          )}
         </div>
       </form>
     );
@@ -682,7 +812,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <span className="text-gray-700 font-medium">{item.name}</span>
                           </div>
                           <span className="text-gray-500 font-semibold">
-                            {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                            {formatPrice(item.price * item.quantity)}₫
                           </span>
                         </li>
                       ))}
@@ -704,7 +834,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Tổng tiền</p>
                       <p className="text-2xl font-bold text-brand-600">
-                        {order.totalAmount.toLocaleString('vi-VN')}đ
+                        {formatPrice(order.totalAmount)}₫
                       </p>
                     </div>
                     
@@ -864,7 +994,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                                     <span className="text-gray-800 font-semibold">{item.name}</span>
                                   </div>
                                   <span className="text-gray-600 font-bold text-xs">
-                                    {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                                    {formatPrice(item.price * item.quantity)}₫
                                   </span>
                                 </div>
                               ))}
@@ -926,7 +1056,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-600 font-semibold">Tổng tiền</span>
                               <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                                {order.totalAmount.toLocaleString('vi-VN')}đ
+                                {formatPrice(order.totalAmount)}₫
                               </p>
                             </div>
                           </div>
@@ -943,44 +1073,95 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
         {/* MENU TAB */}
         {activeTab === 'menu' && (
           <div className="space-y-8">
-             {/* Form thêm món mới - Redesigned */}
+             {/* Form thêm món mới - Redesigned với icon và layout đẹp hơn */}
              <div className="bg-gradient-to-br from-white via-white to-orange-50/30 p-8 rounded-2xl shadow-xl border border-orange-100 backdrop-blur-sm">
-                <div className="flex items-center mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mr-4 shadow-lg shadow-brand-200">
-                    <ChefHat className="w-6 h-6 text-white"/>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Thêm món mới</h3>
+                <div className="flex items-center mb-8">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 flex items-center justify-center mr-4 shadow-lg shadow-brand-200/50 ring-4 ring-brand-100">
+                    <ChefHat className="w-7 h-7 text-white"/>
+                    </div>
+                    <div>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-1">Thêm món mới</h3>
                     <p className="text-sm text-gray-500">Điền thông tin để thêm món vào thực đơn</p>
-                  </div>
+                    </div>
                 </div>
-                <form onSubmit={handleSubmitMenu} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">Tên món <span className="text-red-500">*</span></label>
-                        <input 
-                          required 
-                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white" 
-                          placeholder="VD: Phở bò tái chín"
-                          value={newItem.name || ''} 
-                          onChange={e => setNewItem({...newItem, name: e.target.value})} 
-                        />
+                
+                <form onSubmit={handleSubmitMenu} className="space-y-6">
+                    {/* Row 1: Tên món và Giá */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {/* Tên món */}
+                      <div className="space-y-2 group">
+                        <label className="flex items-center text-sm font-semibold text-gray-700">
+                          <Tag className="w-4 h-4 mr-2 text-brand-600" />
+                          Tên món <span className="text-red-500 ml-1">*</span>
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Tag className="h-5 w-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+                          </div>
+                          <input 
+                            required 
+                            className="w-full border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3.5 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white hover:border-gray-300" 
+                            placeholder="VD: Phở bò tái chín"
+                            value={newItem.name || ''} 
+                            onChange={e => setNewItem({...newItem, name: e.target.value})} 
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Giá */}
+                      <div className="space-y-2 group">
+                        <label className="flex items-center text-sm font-semibold text-gray-700">
+                          <DollarSign className="w-4 h-4 mr-2 text-brand-600" />
+                          Giá (VND) <span className="text-red-500 ml-1">*</span>
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <DollarSign className="h-5 w-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+                          </div>
+                          <input 
+                            required 
+                            type="text" 
+                            className="w-full border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3.5 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white hover:border-gray-300" 
+                            placeholder="VD: 45,000"
+                            value={priceDisplay} 
+                            onChange={(e) => {
+                              // Lấy giá trị input và loại bỏ tất cả ký tự không phải số
+                              const rawValue = e.target.value.replace(/[^0-9]/g, '');
+                              
+                              // Nếu có giá trị số, format ngay lập tức
+                              if (rawValue) {
+                                const parsed = parseInt(rawValue, 10);
+                                if (!isNaN(parsed) && parsed > 0) {
+                                  const formatted = formatPrice(parsed);
+                                  setPriceDisplay(formatted);
+                                  setNewItem({...newItem, price: parsed});
+                                } else {
+                                  setPriceDisplay('');
+                                  setNewItem({...newItem, price: undefined});
+                                }
+                              } else {
+                                setPriceDisplay('');
+                                setNewItem({...newItem, price: undefined});
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">Giá (VND) <span className="text-red-500">*</span></label>
-                        <input 
-                          required 
-                          type="number" 
-                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white" 
-                          placeholder="VD: 45000"
-                          value={newItem.price || ''} 
-                          onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} 
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">Danh mục <span className="text-red-500">*</span></label>
+
+                    {/* Row 2: Danh mục */}
+                    <div className="space-y-2 group">
+                      <label className="flex items-center text-sm font-semibold text-gray-700">
+                        <FolderOpen className="w-4 h-4 mr-2 text-brand-600" />
+                        Danh mục <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+                          <FolderOpen className="h-5 w-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+                        </div>
                         <select
                           required
-                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200"
+                          className="w-full border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3.5 bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 appearance-none hover:border-gray-300 cursor-pointer"
                           value={newItem.category || ''}
                           onChange={e => setNewItem({ ...newItem, category: e.target.value })}
                         >
@@ -991,135 +1172,350 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             </option>
                           ))}
                         </select>
+                        <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
                         {categories.length === 0 && (
-                          <p className="text-xs text-orange-600 font-medium bg-orange-50 px-3 py-2 rounded-lg border border-orange-200">
-                            ⚠️ Chưa có danh mục nào. Vui lòng thêm danh mục ở cột bên phải.
+                        <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-xl">
+                          <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-orange-700 font-medium">
+                            Chưa có danh mục nào. Vui lòng thêm danh mục ở cột bên phải.
                           </p>
+                        </div>
                         )}
                     </div>
-                    <div className="md:col-span-2 space-y-2">
-                         <div className="flex justify-between items-center">
-                            <label className="block text-sm font-semibold text-gray-700">Mô tả</label>
-                            <button 
-                              type="button" 
-                              onClick={handleGenerateDescription} 
-                              disabled={isAiLoading} 
-                              className="text-xs font-semibold text-brand-600 hover:text-brand-800 flex items-center px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-all duration-200"
-                            >
-                                <Sparkles className={`w-3 h-3 mr-1 ${isAiLoading ? 'animate-pulse' : ''}`} /> 
-                                {isAiLoading ? 'Đang viết...' : 'Dùng AI viết mô tả'}
+
+                    {/* Row 3: Mô tả */}
+                    <div className="space-y-2 group">
+                      <div className="flex justify-between items-center">
+                        <label className="flex items-center text-sm font-semibold text-gray-700">
+                          <FileText className="w-4 h-4 mr-2 text-brand-600" />
+                          Mô tả
+                        </label>
+                        <button 
+                          type="button" 
+                          onClick={handleGenerateDescription} 
+                          disabled={isAiLoading} 
+                          className="text-xs font-semibold text-brand-600 hover:text-brand-800 flex items-center px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Sparkles className={`w-3 h-3 mr-1 ${isAiLoading ? 'animate-spin' : ''}`} /> 
+                          {isAiLoading ? 'Đang viết...' : 'Dùng AI viết mô tả'}
                             </button>
                          </div>
+                      <div className="relative">
+                        <div className="absolute top-3 left-4 pointer-events-none">
+                          <FileText className="h-5 w-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+                    </div>
                         <textarea 
-                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white resize-none" 
+                          className="w-full border-2 border-gray-200 rounded-xl pl-12 pr-4 py-3.5 text-sm focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white resize-none hover:border-gray-300" 
                           rows={3} 
                           placeholder="Mô tả chi tiết về món ăn..."
                           value={newItem.description || ''} 
                           onChange={e => setNewItem({...newItem, description: e.target.value})} 
                         />
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Ảnh món ăn</label>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold rounded-xl cursor-pointer hover:from-brand-600 hover:to-brand-700 transition-all duration-200 shadow-lg shadow-brand-200 hover:shadow-xl">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-                                alert('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET).');
-                                return;
-                              }
-                              try {
-                                setIsUploadingImage(true);
-                                const formData = new FormData();
-                                formData.append('file', file);
-                                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-                                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-                                  method: 'POST',
-                                  body: formData
-                                });
-                                const data = await res.json();
-                                if (!res.ok) {
-                                  throw new Error(data?.error?.message || 'Upload ảnh thất bại');
-                                }
-                                setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
-                              } catch (err) {
-                                alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
-                              } finally {
-                                setIsUploadingImage(false);
-                              }
-                            }}
-                          />
-                          📸 Chọn ảnh
-                        </label>
-                        {isUploadingImage && (
-                          <span className="text-sm text-gray-600 font-medium flex items-center">
-                            <span className="animate-spin mr-2">⏳</span> Đang upload ảnh...
-                          </span>
-                        )}
                       </div>
-                      {newItem.imageUrl && (
-                        <div className="mt-3">
-                          <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
-                          <div className="relative inline-block">
-                            <img
-                              src={newItem.imageUrl}
-                              alt="Preview món"
-                              className="w-40 h-32 object-cover rounded-xl border-2 border-brand-200 shadow-md"
+                    </div>
+
+                    {/* Row 4: Upload ảnh */}
+                    <div className="space-y-3">
+                      <label className="flex items-center text-sm font-semibold text-gray-700">
+                        <Image className="w-4 h-4 mr-2 text-brand-600" />
+                        Ảnh món ăn
+                      </label>
+                      
+                      {!newItem.imageUrl ? (
+                        <div className="flex items-center gap-4">
+                          <label 
+                            htmlFor="image-upload"
+                            className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold rounded-xl cursor-pointer hover:from-brand-600 hover:to-brand-700 transition-all duration-200 shadow-lg shadow-brand-200 hover:shadow-xl"
+                          >
+                            <Upload className="w-5 h-5 mr-2" />
+                            Chọn ảnh
+                        <input
+                              id="image-upload"
+                          type="file"
+                          accept="image/*"
+                              className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+                              alert('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET).');
+                              return;
+                            }
+                            try {
+                              setIsUploadingImage(true);
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                              const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                                method: 'POST',
+                                body: formData
+                              });
+                              const data = await res.json();
+                              if (!res.ok) {
+                                throw new Error(data?.error?.message || 'Upload ảnh thất bại');
+                              }
+                              setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
+                            } finally {
+                              setIsUploadingImage(false);
+                            }
+                          }}
+                        />
+                          </label>
+                        {isUploadingImage && (
+                            <div className="flex items-center gap-2 text-sm text-gray-600 font-medium">
+                              <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                              Đang upload ảnh...
+                            </div>
+                        )}
+                          <p className="text-xs text-gray-500">PNG, JPG, GIF tối đa 10MB</p>
+                      </div>
+                      ) : (
+                        <div className="relative group/image-preview">
+                          <div className="relative rounded-2xl overflow-hidden border-2 border-brand-200 shadow-lg">
+                          <img
+                            src={newItem.imageUrl}
+                            alt="Preview món"
+                              className="w-full h-64 object-cover"
                             />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover/image-preview:opacity-100 transition-opacity duration-300"></div>
                             <button
                               type="button"
                               onClick={() => setNewItem(prev => ({ ...prev, imageUrl: undefined }))}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                              className="absolute top-3 right-3 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 shadow-lg hover:scale-110 transition-all duration-200 opacity-0 group-hover/image-preview:opacity-100"
                             >
-                              <X className="w-4 h-4" />
+                              <X className="w-5 h-5" />
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('image-upload')?.click()}
+                              className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm text-brand-600 rounded-lg px-4 py-2 font-semibold text-sm hover:bg-white shadow-lg opacity-0 group-hover/image-preview:opacity-100 transition-all duration-200"
+                            >
+                              <Image className="w-4 h-4 inline mr-2" />
+                              Đổi ảnh
+                            </button>
+                            <input
+                              id="image-upload"
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+                                  alert('Chưa cấu hình Cloudinary.');
+                                  return;
+                                }
+                                try {
+                                  setIsUploadingImage(true);
+                                  const formData = new FormData();
+                                  formData.append('file', file);
+                                  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                                  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                                    method: 'POST',
+                                    body: formData
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) throw new Error(data?.error?.message || 'Upload thất bại');
+                                  setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
+                                } finally {
+                                  setIsUploadingImage(false);
+                                }
+                              }}
+                            />
                           </div>
                         </div>
                       )}
                     </div>
-                    <div className="md:col-span-2">
-                        <Button 
-                          type="submit" 
-                          className="w-full py-4 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-200" 
-                          disabled={isSavingMenuItem}
-                        >
-                          {isSavingMenuItem ? (
-                            <span className="flex items-center justify-center">
-                              <span className="animate-spin mr-2">⏳</span> Đang lưu...
-                            </span>
-                          ) : (
-                            <span className="flex items-center justify-center">
-                              <Plus className="w-5 h-5 mr-2" /> Thêm vào thực đơn
-                            </span>
-                          )}
+
+                    {/* Submit Button */}
+                    <div className="pt-4">
+                      <Button 
+                        type="submit" 
+                        className="w-full py-4 text-lg font-bold bg-gradient-to-r from-brand-500 via-brand-600 to-brand-700 hover:from-brand-600 hover:via-brand-700 hover:to-brand-800 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" 
+                        disabled={isSavingMenuItem}
+                      >
+                        {isSavingMenuItem ? (
+                          <span className="flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            Đang lưu...
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center">
+                            <Plus className="w-5 h-5 mr-2" />
+                            Thêm vào thực đơn
+                          </span>
+                        )}
                         </Button>
                     </div>
                 </form>
              </div>
 
-             {/* Layout với danh sách món và danh mục */}
-             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-               {/* Danh sách món - Redesigned */}
-               <div className="lg:col-span-3">
-                 <div className="mb-4">
-                   <h3 className="text-xl font-bold text-gray-900">Danh sách món ({menu.length})</h3>
-                   <p className="text-sm text-gray-500">Quản lý các món trong thực đơn</p>
+             {/* Phần quản lý danh mục - Section riêng */}
+             <div className="bg-gradient-to-br from-white via-white to-orange-50/30 p-6 rounded-2xl shadow-xl border border-orange-100">
+               <div className="flex items-center justify-between mb-6">
+                 <div className="flex items-center">
+                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mr-4 shadow-lg shadow-brand-200/50">
+                     <Receipt className="w-6 h-6 text-white"/>
+                          </div>
+                   <div>
+                     <h3 className="text-xl font-bold text-gray-900">Quản lý danh mục</h3>
+                     <p className="text-sm text-gray-500">Tổ chức món ăn theo danh mục</p>
+                   </div>
                  </div>
-                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {menu.length === 0 ? (
-                    <div className="col-span-full text-center py-12 bg-white rounded-2xl border-2 border-dashed border-gray-300">
-                      <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                      <p className="text-gray-500 font-medium">Chưa có món nào trong thực đơn</p>
-                      <p className="text-sm text-gray-400 mt-1">Thêm món mới ở phía trên</p>
-                    </div>
-                  ) : (
-                    menu.map(item => (
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                 {categories.length === 0 ? (
+                   <div className="col-span-full text-center py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                     <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                     <p className="text-sm text-gray-500 font-medium">Chưa có danh mục nào</p>
+                   </div>
+                 ) : (
+                   categories.map(cat => {
+                     const itemCount = menu.filter(item => item.category === cat.name).length;
+                     const isEditing = editingCategoryId === cat.id;
+                     const isDeleting = deletingCategoryId === cat.id;
+                     
+                     return (
+                       <div
+                         key={cat.id}
+                         className="p-4 bg-white rounded-xl border-2 border-gray-200 hover:border-brand-400 hover:shadow-md transition-all duration-200 group"
+                       >
+                         {isEditing ? (
+                           // Form chỉnh sửa inline
+                           <form
+                             onSubmit={async (e) => {
+                               e.preventDefault();
+                               const trimmedName = editingCategoryName.trim();
+                               if (!trimmedName) {
+                                 alert('Tên danh mục không được để trống');
+                                 return;
+                               }
+                               
+                               // Kiểm tra trùng với danh mục khác
+                               const duplicate = categories.find(
+                                 c => c.id !== cat.id && c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+                               );
+                               if (duplicate) {
+                                 alert(`Danh mục "${trimmedName}" đã tồn tại!`);
+                                 return;
+                               }
+                               
+                               try {
+                                 await updateCategory(cat.id, trimmedName);
+                               } catch (err) {
+                                 // Error đã được xử lý trong updateCategory
+                               }
+                             }}
+                             className="space-y-2"
+                           >
+                             <input
+                               type="text"
+                               className="w-full border-2 border-brand-300 rounded-lg px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+                               value={editingCategoryName}
+                               onChange={(e) => setEditingCategoryName(e.target.value)}
+                               autoFocus
+                               onBlur={() => {
+                                 if (editingCategoryName.trim() === cat.name.trim()) {
+                                   setEditingCategoryId(null);
+                                   setEditingCategoryName('');
+                                 }
+                               }}
+                             />
+                             <div className="flex gap-2">
+                          <Button 
+                                 type="submit"
+                            size="sm"
+                                 className="flex-1 px-3 py-1.5 text-xs"
+                               >
+                                 <CheckCircle className="w-3 h-3 mr-1" />
+                                 Lưu
+                               </Button>
+                               <Button
+                                 type="button"
+                                 size="sm"
+                                 variant="secondary"
+                                 onClick={() => {
+                                   setEditingCategoryId(null);
+                                   setEditingCategoryName('');
+                                 }}
+                                 className="px-3 py-1.5 text-xs"
+                               >
+                                 <X className="w-3 h-3" />
+                               </Button>
+                             </div>
+                           </form>
+                         ) : (
+                           // Hiển thị bình thường với nút sửa/xóa
+                           <div className="flex items-center justify-between gap-2">
+                             <div className="flex items-center gap-3 flex-1 min-w-0">
+                               <div className="w-3 h-3 rounded-full bg-brand-500 group-hover:bg-brand-600 transition-colors flex-shrink-0"></div>
+                               <span className="text-sm font-semibold text-gray-700 group-hover:text-brand-700 transition-colors truncate">
+                                 {cat.name}
+                               </span>
+                             </div>
+                             <div className="flex items-center gap-2 flex-shrink-0">
+                               <span className="inline-flex items-center justify-center px-2.5 py-1 bg-gradient-to-r from-brand-50 to-orange-50 text-brand-700 text-xs font-bold rounded-full border border-brand-200">
+                                 {itemCount}
+                               </span>
+                               <button
+                                 onClick={() => {
+                                   setEditingCategoryId(cat.id);
+                                   setEditingCategoryName(cat.name);
+                                 }}
+                                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                 title="Sửa danh mục"
+                               >
+                                 <Edit className="w-4 h-4" />
+                               </button>
+                               <button
+                                 onClick={() => deleteCategory(cat.id, cat.name)}
+                                 disabled={isDeleting}
+                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                 title="Xóa danh mục"
+                               >
+                                 {isDeleting ? (
+                                   <Loader2 className="w-4 h-4 animate-spin" />
+                                 ) : (
+                                   <Trash className="w-4 h-4" />
+                                 )}
+                               </button>
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     );
+                   })
+                 )}
+               </div>
+               
+               <CategoryCreator onCreated={fetchCategories} />
+             </div>
+
+             {/* Danh sách món - Toàn bộ chiều rộng */}
+             <div className="mb-4">
+               <h3 className="text-xl font-bold text-gray-900">Danh sách món ({menu.length})</h3>
+               <p className="text-sm text-gray-500">Quản lý các món trong thực đơn</p>
+             </div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+               {menu.length === 0 ? (
+                 <div className="col-span-full text-center py-12 bg-white rounded-2xl border-2 border-dashed border-gray-300">
+                   <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                   <p className="text-gray-500 font-medium">Chưa có món nào trong thực đơn</p>
+                   <p className="text-sm text-gray-400 mt-1">Thêm món mới ở phía trên</p>
+                 </div>
+               ) : (
+                 menu.map(item => (
                       <div 
                         key={item.id} 
                         className={`bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 group ${
@@ -1145,37 +1541,40 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           {/* Action buttons overlay */}
                           <div className="absolute top-3 right-3 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                             <button
-                              onClick={() => {
-                                const newAvailable = !item.available;
-                                onUpdateMenuItem(item.id, { available: newAvailable });
-                              }}
+                            onClick={() => {
+                              const newAvailable = !item.available;
+                              onUpdateMenuItem(item.id, { available: newAvailable });
+                            }}
                               className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200"
-                              title={item.available ? "Ẩn món (hết hàng)" : "Hiện món (còn hàng)"}
-                            >
+                            title={item.available ? "Ẩn món (hết hàng)" : "Hiện món (còn hàng)"}
+                          >
                               {item.available ? <EyeOff className="w-4 h-4 text-gray-700" /> : <Eye className="w-4 h-4 text-green-600" />}
                             </button>
                             <button
-                              onClick={() => setEditingItem(item)}
+                              onClick={() => {
+                                setEditingItem(item);
+                                setEditingPriceDisplay(formatPrice(item.price));
+                              }}
                               className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200"
                               title="Chỉnh sửa"
                             >
                               <Edit className="w-4 h-4 text-blue-600" />
                             </button>
                             <button
-                              onClick={() => handleDeleteMenu(item.id)} 
-                              disabled={deletingMenuId === item.id}
+                            onClick={() => handleDeleteMenu(item.id)} 
+                            disabled={deletingMenuId === item.id}
                               className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200 disabled:opacity-50"
                               title="Xóa món"
-                            >
+                          >
                               <Trash className="w-4 h-4 text-red-600" />
                             </button>
-                          </div>
+                        </div>
                         </div>
                         
                         {/* Nội dung */}
                         <div className="p-5">
                           <h4 className="font-bold text-lg text-gray-900 line-clamp-1 mb-2">{item.name}</h4>
-                          <p className="text-xl font-bold text-brand-600 mb-3">{item.price.toLocaleString('vi-VN')}₫</p>
+                          <p className="text-xl font-bold text-brand-600 mb-3">{formatPrice(item.price)}₫</p>
                           <p className="text-sm text-gray-500 line-clamp-2 mb-4 min-h-[2.5rem]">{item.description || 'Chưa có mô tả'}</p>
                           
                           {/* Footer với danh mục và trạng thái */}
@@ -1183,119 +1582,29 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-brand-50 to-orange-50 text-brand-700 text-xs font-semibold rounded-full border border-brand-200">
                               {item.category}
                             </span>
-                            {item.available ? (
+                           {item.available ? (
                               <span className="inline-flex items-center text-xs text-green-600 font-semibold bg-green-50 px-3 py-1 rounded-full">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Còn hàng
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center text-xs text-red-600 font-semibold bg-red-50 px-3 py-1 rounded-full">
-                                <XCircle className="w-3 h-3 mr-1" />
-                                Hết hàng
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-               </div>
-
-               {/* Cột danh mục - Redesigned với chức năng sửa/xóa */}
-               <div className="lg:col-span-1">
-                 <div className="bg-gradient-to-br from-white via-white to-orange-50/30 rounded-2xl shadow-xl border border-orange-100 p-6 sticky top-4">
-                   <div className="flex items-center mb-4">
-                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mr-3 shadow-md">
-                       <Receipt className="w-5 h-5 text-white"/>
-                     </div>
-                     <h4 className="text-lg font-bold text-gray-900">Danh mục</h4>
-                   </div>
-                   <ul className="space-y-2 max-h-64 overflow-y-auto pr-2 mb-4">
-                     {categories.length === 0 ? (
-                       <li className="text-sm text-gray-500 text-center py-4">Chưa có danh mục nào.</li>
-                     ) : (
-                       categories.map(cat => (
-                         <li 
-                           key={cat.id} 
-                           className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all duration-200 group"
-                         >
-                           {editingCategory?.id === cat.id ? (
-                             <div className="flex items-center gap-2 flex-1">
-                               <input
-                                 type="text"
-                                 className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
-                                 value={editingCategoryName}
-                                 onChange={e => setEditingCategoryName(e.target.value)}
-                                 onKeyDown={e => {
-                                   if (e.key === 'Enter') {
-                                     handleUpdateCategory(cat.id);
-                                   } else if (e.key === 'Escape') {
-                                     setEditingCategory(null);
-                                     setEditingCategoryName('');
-                                   }
-                                 }}
-                                 autoFocus
-                               />
-                               <button
-                                 onClick={() => handleUpdateCategory(cat.id)}
-                                 disabled={isSavingCategory || !editingCategoryName.trim()}
-                                 className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
-                                 title="Lưu"
-                               >
-                                 <CheckCircle className="w-4 h-4" />
-                               </button>
-                               <button
-                                 onClick={() => {
-                                   setEditingCategory(null);
-                                   setEditingCategoryName('');
-                                 }}
-                                 disabled={isSavingCategory}
-                                 className="p-1 text-gray-400 hover:text-gray-600"
-                                 title="Hủy"
-                               >
-                                 <X className="w-4 h-4" />
-                               </button>
-                             </div>
+                               <CheckCircle className="w-3 h-3 mr-1" />
+                               Còn hàng
+                             </span>
                            ) : (
-                             <>
-                               <span className="text-sm font-medium text-gray-700 flex-1">{cat.name}</span>
-                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button
-                                   onClick={() => {
-                                     setEditingCategory(cat);
-                                     setEditingCategoryName(cat.name);
-                                   }}
-                                   className="p-1 text-blue-600 hover:text-blue-700"
-                                   title="Sửa"
-                                 >
-                                   <Edit className="w-4 h-4" />
-                                 </button>
-                                 <button
-                                   onClick={() => handleDeleteCategory(cat.id)}
-                                   disabled={deletingCategoryId === cat.id}
-                                   className="p-1 text-red-600 hover:text-red-700 disabled:opacity-50"
-                                   title="Xóa"
-                                 >
-                                   <Trash className="w-4 h-4" />
-                                 </button>
-                               </div>
-                             </>
+                              <span className="inline-flex items-center text-xs text-red-600 font-semibold bg-red-50 px-3 py-1 rounded-full">
+                               <XCircle className="w-3 h-3 mr-1" />
+                               Hết hàng
+                             </span>
                            )}
-                         </li>
-                       ))
-                     )}
-                   </ul>
-                   <CategoryCreator onCreated={fetchCategories} />
-                 </div>
+                        </div>
+                    </div>
                </div>
+                    ))
+                 )}
              </div>
           </div>
         )}
 
         {/* STATS TAB */}
         {activeTab === 'stats' && (
-          <div className="space-y-6">
+             <div className="space-y-6">
             {/* Filter UI */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
               <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -1362,13 +1671,13 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Doanh thu tổng */}
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-500">Doanh thu tổng</p>
                       <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
+                     </div>
                     <h3 className="text-3xl font-bold text-brand-600 mb-1">
-                      {statsData.overview.totalRevenue.toLocaleString('vi-VN')}đ
+                      {formatPrice(statsData.overview.totalRevenue)}₫
                     </h3>
                     {statsData.overview.revenueChange !== null && statsData.overview.revenueChange !== 0 && (
                       <div className={`flex items-center text-sm ${statsData.overview.revenueChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1389,11 +1698,11 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   </div>
 
                   {/* Tổng đơn hàng */}
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-500">Tổng đơn hàng</p>
                       <ShoppingCart className="w-5 h-5 text-blue-600" />
-                    </div>
+                     </div>
                     <h3 className="text-3xl font-bold text-blue-600 mb-1">{statsData.overview.totalOrders}</h3>
                     {statsData.overview.ordersChange !== null && statsData.overview.ordersChange !== 0 && (
                       <div className={`flex items-center text-sm ${statsData.overview.ordersChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1414,13 +1723,13 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   </div>
 
                   {/* Doanh thu trung bình/đơn */}
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-500">Doanh thu TB/đơn</p>
                       <Activity className="w-5 h-5 text-purple-600" />
-                    </div>
+                     </div>
                     <h3 className="text-3xl font-bold text-purple-600 mb-1">
-                      {statsData.overview.averageOrderValue.toLocaleString('vi-VN')}đ
+                      {formatPrice(statsData.overview.averageOrderValue)}₫
                     </h3>
                     {statsData.overview.previousAverageOrderValue > 0 && (
                       <div className={`flex items-center text-sm ${
@@ -1434,7 +1743,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         {Math.abs(((statsData.overview.averageOrderValue - statsData.overview.previousAverageOrderValue) / statsData.overview.previousAverageOrderValue) * 100).toFixed(1)}% so với kỳ trước
                       </div>
                     )}
-                  </div>
+                 </div>
 
                   {/* Số khách hàng */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -1498,9 +1807,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                       <LineChart data={statsData.revenueByDate}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="date" tickFormatter={(value) => new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })} />
-                        <YAxis />
+                            <YAxis />
                         <Tooltip 
-                          formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`}
+                          formatter={(value: number) => `${formatPrice(value)}₫`}
                           labelFormatter={(label) => new Date(label).toLocaleDateString('vi-VN')}
                         />
                         <Line type="monotone" dataKey="revenue" stroke="#4F46E5" strokeWidth={2} />
@@ -1522,7 +1831,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="hour" />
                         <YAxis />
-                        <Tooltip formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`} />
+                        <Tooltip formatter={(value: number) => `${formatPrice(value)}₫`} />
                         <Area type="monotone" dataKey="revenue" stroke="#4F46E5" fillOpacity={1} fill="url(#colorRevenue)" />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -1538,9 +1847,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
                         <Tooltip formatter={(value: number) => `${value} phần`} />
                         <Bar dataKey="quantity" fill="#ea580c" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                        </BarChart>
+                     </ResponsiveContainer>
+                 </div>
 
                   {/* Phân bổ theo danh mục (Pie Chart) */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -1561,7 +1870,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <Cell key={`cell-${index}`} fill={['#4F46E5', '#ea580c', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 6]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`} />
+                        <Tooltip formatter={(value: number) => `${formatPrice(value)}₫`} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -1590,7 +1899,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                               <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
                               <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.name}</td>
                               <td className="px-4 py-3 text-sm text-gray-600 text-right">{item.quantity}</td>
-                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{item.revenue.toLocaleString('vi-VN')}đ</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{formatPrice(item.revenue)}₫</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1619,7 +1928,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                               <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
                               <td className="px-4 py-3 text-sm font-medium text-gray-900">Bàn {table.tableNumber}</td>
                               <td className="px-4 py-3 text-sm text-gray-600 text-right">{table.orders}</td>
-                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{table.revenue.toLocaleString('vi-VN')}đ</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{formatPrice(table.revenue)}₫</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1650,7 +1959,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">Bàn {order.tableNumber}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{order.customerName || 'Khách vãng lai'}</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{order.totalAmount.toLocaleString('vi-VN')}đ</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{formatPrice(order.totalAmount)}₫</td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(order.createdAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </td>
@@ -1669,7 +1978,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 <p className="text-gray-500">Chưa có dữ liệu thống kê. Vui lòng chọn kỳ thống kê và nhấn "Tải thống kê".</p>
               </div>
             )}
-          </div>
+             </div>
         )}
 
         {/* QR CODE TAB */}
@@ -2629,7 +2938,10 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">Sửa món: {editingItem.name}</h3>
               <button
-                onClick={() => setEditingItem(null)}
+                onClick={() => {
+                  setEditingItem(null);
+                  setEditingPriceDisplay('');
+                }}
                 className="p-1 rounded-full hover:bg-gray-100"
               >
                 <X className="w-5 h-5" />
@@ -2642,9 +2954,16 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 e.preventDefault();
                 try {
                   setIsSavingEdit(true);
+                  // Parse giá từ display value
+                  const parsedPrice = editingPriceDisplay ? parsePrice(editingPriceDisplay) : editingItem.price;
+                  if (!parsedPrice || parsedPrice <= 0) {
+                    alert('Giá không hợp lệ');
+                    setIsSavingEdit(false);
+                    return;
+                  }
                   await onUpdateMenuItem(editingItem.id, {
                     name: editingItem.name,
-                    price: editingItem.price,
+                    price: parsedPrice,
                     description: editingItem.description,
                     category: editingItem.category,
                     imageUrl: editingItem.imageUrl,
@@ -2652,6 +2971,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   });
                   setIsSavingEdit(false);
                   setEditingItem(null);
+                  setEditingPriceDisplay('');
                 } catch (err) {
                   setIsSavingEdit(false);
                   alert(err instanceof Error ? err.message : 'Không thể cập nhật món');
@@ -2669,10 +2989,30 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
               <div>
                 <label className="block text-sm font-medium text-gray-700">Giá (VND)</label>
                 <input
-                  type="number"
+                  type="text"
                   className="mt-1 w-full border border-gray-300 rounded-md p-2 text-sm"
-                  value={editingItem.price}
-                  onChange={e => setEditingItem(prev => prev ? { ...prev, price: Number(e.target.value) } : prev)}
+                  placeholder="VD: 45,000"
+                  value={editingPriceDisplay}
+                  onChange={(e) => {
+                    // Lấy giá trị input và loại bỏ tất cả ký tự không phải số
+                    const rawValue = e.target.value.replace(/[^0-9]/g, '');
+                    
+                    // Nếu có giá trị số, format ngay lập tức
+                    if (rawValue) {
+                      const parsed = parseInt(rawValue, 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        const formatted = formatPrice(parsed);
+                        setEditingPriceDisplay(formatted);
+                        setEditingItem(prev => prev ? { ...prev, price: parsed } : prev);
+                      } else {
+                        setEditingPriceDisplay('');
+                        setEditingItem(prev => prev ? prev : null);
+                      }
+                    } else {
+                      setEditingPriceDisplay('');
+                      setEditingItem(prev => prev ? prev : null);
+                    }
+                  }}
                 />
               </div>
               <div>
