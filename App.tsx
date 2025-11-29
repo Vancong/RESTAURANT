@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initialOrders } from './services/mockData';
-import { CartItem, MenuItem, Order, OrderStatus, PaymentMethod, Restaurant, Role, NewRestaurantPayload, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from './types';
+import { CartItem, MenuItem, Order, OrderStatus, PaymentMethod, Restaurant, Role, NewRestaurantPayload, RestaurantStatus, OverviewStats, RestaurantRevenueStats, RestaurantStats, StatsPeriod } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
@@ -791,6 +791,35 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchMyRestaurantStats = async (period: StatsPeriod, startDate?: string, endDate?: string): Promise<RestaurantStats> => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại');
+      }
+
+      const params = new URLSearchParams();
+      params.append('period', period);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+
+      const url = `${API_BASE_URL}/api/restaurants/me/stats?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể tải thống kê');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   if (role === Role.SUPER_ADMIN) {
     return (
       <SuperAdminDashboard 
@@ -825,6 +854,7 @@ const App: React.FC = () => {
         onDeleteMenuItem={deleteMenuItem}
         onUpdateRestaurant={updateRestaurant}
         onLogout={handleLogout}
+        onFetchStats={fetchMyRestaurantStats}
       />
     );
   }

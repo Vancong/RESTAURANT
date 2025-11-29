@@ -7,6 +7,7 @@ import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
 import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP } from "../services/emailService.js";
 import { EmailChangeToken } from "../models/EmailChangeToken.js";
 import { Order, OrderStatus } from "../models/Order.js";
+import { MenuItem } from "../models/MenuItem.js";
 import fetch from "node-fetch";
 
 const router = Router();
@@ -713,6 +714,319 @@ router.post("/generate-qr", async (req, res) => {
     });
   }
 });
+
+// Helper functions for date calculations
+const calculateDateRange = (period: string, startDate?: string, endDate?: string): { start: Date; end: Date } => {
+  const now = new Date();
+  let start: Date;
+  let end: Date = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  if (period === 'custom' && startDate && endDate) {
+    start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+  } else if (period === 'today') {
+    start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday
+    start = new Date(now.setDate(diff));
+    start.setHours(0, 0, 0, 0);
+  } else if (period === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+  } else if (period === 'year') {
+    start = new Date(now.getFullYear(), 0, 1);
+    start.setHours(0, 0, 0, 0);
+  } else {
+    // Default to today
+    start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+  }
+
+  return { start, end };
+};
+
+const calculatePreviousPeriod = (start: Date, end: Date): { start: Date; end: Date } => {
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  
+  const prevEnd = new Date(start);
+  prevEnd.setDate(prevEnd.getDate() - 1);
+  prevEnd.setHours(23, 59, 59, 999);
+  
+  const prevStart = new Date(prevEnd);
+  prevStart.setDate(prevStart.getDate() - diffDays + 1);
+  prevStart.setHours(0, 0, 0, 0);
+  
+  return { start: prevStart, end: prevEnd };
+};
+
+const calculateAverageProcessingTime = (orders: any[]): number => {
+  const completedOrders = orders.filter(o => 
+    o.status === OrderStatus.COMPLETED && 
+    o.createdAt && 
+    o.updatedAt
+  );
+  
+  if (completedOrders.length === 0) return 0;
+  
+  const totalMinutes = completedOrders.reduce((sum, order) => {
+    const created = new Date(order.createdAt).getTime();
+    const updated = new Date(order.updatedAt).getTime();
+    const diffMinutes = (updated - created) / (1000 * 60);
+    return sum + diffMinutes;
+  }, 0);
+  
+  return Math.round(totalMinutes / completedOrders.length);
+};
+
+// Restaurant Admin: Lấy thống kê chi tiết
+router.get(
+  "/me/stats",
+  requireAuth,
+  requireRole([UserRole.RESTAURANT_ADMIN] as string[]),
+  async (req: AuthRequest, res) => {
+    try {
+      const restaurantId = req.auth?.restaurantId;
+      if (!restaurantId) {
+        return res.status(403).json({ message: "Không xác định được nhà hàng" });
+      }
+
+      const { period = 'today', startDate, endDate } = req.query as {
+        period?: string;
+        startDate?: string;
+        endDate?: string;
+      };
+
+      // Calculate date ranges
+      const { start, end } = calculateDateRange(period, startDate, endDate);
+      const { start: prevStart, end: prevEnd } = calculatePreviousPeriod(start, end);
+
+      const restaurantObjectId = new mongoose.Types.ObjectId(restaurantId);
+
+      // Get orders for current period
+      const currentOrders = await Order.find({
+        restaurantId: restaurantObjectId,
+        createdAt: { $gte: start, $lte: end }
+      });
+
+      // Get orders for previous period
+      const previousOrders = await Order.find({
+        restaurantId: restaurantObjectId,
+        createdAt: { $gte: prevStart, $lte: prevEnd }
+      });
+
+      // Overview calculations
+      const currentCompletedOrders = currentOrders.filter(
+        o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED
+      );
+      const previousCompletedOrders = previousOrders.filter(
+        o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED
+      );
+
+      const totalRevenue = currentCompletedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      const previousRevenue = previousCompletedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      
+      // Calculate revenue change: null if no previous data, otherwise percentage
+      let revenueChange: number | null = null;
+      if (previousRevenue > 0) {
+        revenueChange = ((totalRevenue - previousRevenue) / previousRevenue) * 100;
+      } else if (previousRevenue === 0 && totalRevenue > 0) {
+        // New data, no comparison possible - return null to indicate "new"
+        revenueChange = null;
+      } else {
+        revenueChange = 0; // Both are 0
+      }
+
+      const totalOrders = currentCompletedOrders.length;
+      const previousOrdersCount = previousCompletedOrders.length;
+      
+      // Calculate orders change: null if no previous data, otherwise percentage
+      let ordersChange: number | null = null;
+      if (previousOrdersCount > 0) {
+        ordersChange = ((totalOrders - previousOrdersCount) / previousOrdersCount) * 100;
+      } else if (previousOrdersCount === 0 && totalOrders > 0) {
+        // New data, no comparison possible
+        ordersChange = null;
+      } else {
+        ordersChange = 0; // Both are 0
+      }
+
+      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const previousAverageOrderValue = previousOrdersCount > 0 ? previousRevenue / previousOrdersCount : 0;
+
+      // Unique customers
+      const uniqueCustomers = new Set(
+        currentOrders
+          .filter(o => o.customerName)
+          .map(o => o.customerName?.toLowerCase().trim())
+      ).size;
+
+      // Cancellation rate
+      const cancelledCount = currentOrders.filter(o => o.status === OrderStatus.CANCELLED).length;
+      const cancellationRate = currentOrders.length > 0 
+        ? (cancelledCount / currentOrders.length) * 100 
+        : 0;
+
+      // Average processing time
+      const avgProcessingTime = calculateAverageProcessingTime(currentOrders);
+
+      // Revenue by date
+      const revenueByDateMap = new Map<string, { revenue: number; orders: number }>();
+      currentCompletedOrders.forEach(order => {
+        const dateKey = new Date(order.createdAt || new Date()).toISOString().split('T')[0];
+        const current = revenueByDateMap.get(dateKey) || { revenue: 0, orders: 0 };
+        revenueByDateMap.set(dateKey, {
+          revenue: current.revenue + order.totalAmount,
+          orders: current.orders + 1
+        });
+      });
+      const revenueByDate = Array.from(revenueByDateMap.entries())
+        .map(([date, data]) => ({ date, ...data }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Revenue by hour
+      const revenueByHourMap = new Map<number, { revenue: number; orders: number }>();
+      currentCompletedOrders.forEach(order => {
+        const hour = new Date(order.createdAt || new Date()).getHours();
+        const current = revenueByHourMap.get(hour) || { revenue: 0, orders: 0 };
+        revenueByHourMap.set(hour, {
+          revenue: current.revenue + order.totalAmount,
+          orders: current.orders + 1
+        });
+      });
+      const revenueByHour = Array.from({ length: 24 }, (_, i) => ({
+        hour: i,
+        revenue: revenueByHourMap.get(i)?.revenue || 0,
+        orders: revenueByHourMap.get(i)?.orders || 0
+      }));
+
+      // Top menu items
+      const menuItemMap = new Map<string, { menuItemId: string; name: string; quantity: number; revenue: number }>();
+      currentCompletedOrders.forEach(order => {
+        order.items.forEach(item => {
+          const current = menuItemMap.get(item.menuItemId) || { menuItemId: item.menuItemId, name: item.name, quantity: 0, revenue: 0 };
+          menuItemMap.set(item.menuItemId, {
+            menuItemId: item.menuItemId,
+            name: item.name,
+            quantity: current.quantity + item.quantity,
+            revenue: current.revenue + (item.price * item.quantity)
+          });
+        });
+      });
+      const topMenuItems = Array.from(menuItemMap.values())
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 10);
+
+      // Revenue by category - Get menu items to map categories
+      const menuItems = await MenuItem.find({ restaurantId: restaurantObjectId });
+      const menuItemCategoryMap = new Map<string, string>();
+      menuItems.forEach(item => {
+        menuItemCategoryMap.set(item._id.toString(), item.category);
+      });
+
+      const categoryRevenueMap = new Map<string, { revenue: number; quantity: number }>();
+      currentCompletedOrders.forEach(order => {
+        order.items.forEach(item => {
+          const category = menuItemCategoryMap.get(item.menuItemId) || 'Khác';
+          const current = categoryRevenueMap.get(category) || { revenue: 0, quantity: 0 };
+          categoryRevenueMap.set(category, {
+            revenue: current.revenue + (item.price * item.quantity),
+            quantity: current.quantity + item.quantity
+          });
+        });
+      });
+      const revenueByCategory = Array.from(categoryRevenueMap.entries())
+        .map(([category, data]) => ({ category, ...data }))
+        .sort((a, b) => b.revenue - a.revenue);
+
+      // Revenue by table
+      const tableMap = new Map<string, { revenue: number; orders: number }>();
+      currentCompletedOrders.forEach(order => {
+        const current = tableMap.get(order.tableNumber) || { revenue: 0, orders: 0 };
+        tableMap.set(order.tableNumber, {
+          revenue: current.revenue + order.totalAmount,
+          orders: current.orders + 1
+        });
+      });
+      const revenueByTable = Array.from(tableMap.entries())
+        .map(([tableNumber, data]) => ({ tableNumber, ...data }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 20);
+
+      // Orders by status
+      const ordersByStatus = {
+        pending: currentOrders.filter(o => o.status === OrderStatus.PENDING).length,
+        confirmed: currentOrders.filter(o => o.status === OrderStatus.CONFIRMED).length,
+        served: currentOrders.filter(o => o.status === OrderStatus.SERVED).length,
+        completed: currentOrders.filter(o => o.status === OrderStatus.COMPLETED).length,
+        cancelled: currentOrders.filter(o => o.status === OrderStatus.CANCELLED).length
+      };
+
+      // Largest orders
+      const largestOrders = currentCompletedOrders
+        .map(order => ({
+          orderId: order._id.toString(),
+          tableNumber: order.tableNumber,
+          totalAmount: order.totalAmount,
+          customerName: order.customerName,
+          createdAt: order.createdAt || new Date()
+        }))
+        .sort((a, b) => b.totalAmount - a.totalAmount)
+        .slice(0, 20);
+
+      // Top selling menu item (for KPI)
+      const topSellingItem = topMenuItems.length > 0 ? topMenuItems[0] : null;
+      const peakHour = revenueByHour.reduce((max, item) => 
+        item.revenue > max.revenue ? item : max, 
+        revenueByHour[0] || { hour: 0, revenue: 0, orders: 0 }
+      );
+
+      res.json({
+        period: {
+          startDate: start.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0]
+        },
+        previousPeriod: {
+          startDate: prevStart.toISOString().split('T')[0],
+          endDate: prevEnd.toISOString().split('T')[0]
+        },
+        overview: {
+          totalRevenue,
+          previousRevenue,
+          revenueChange: revenueChange !== null ? Math.round(revenueChange * 100) / 100 : null,
+          totalOrders,
+          previousOrders: previousOrdersCount,
+          ordersChange: ordersChange !== null ? Math.round(ordersChange * 100) / 100 : null,
+          averageOrderValue: Math.round(averageOrderValue),
+          previousAverageOrderValue: Math.round(previousAverageOrderValue),
+          totalCustomers: uniqueCustomers,
+          cancellationRate: Math.round(cancellationRate * 100) / 100,
+          averageProcessingTime: avgProcessingTime,
+          topSellingItem: topSellingItem ? {
+            name: topSellingItem.name,
+            quantity: topSellingItem.quantity
+          } : null,
+          peakHour: peakHour.hour
+        },
+        revenueByDate,
+        revenueByHour,
+        topMenuItems,
+        revenueByCategory,
+        revenueByTable,
+        ordersByStatus,
+        largestOrders
+      });
+    } catch (error) {
+      console.error("Error fetching restaurant stats:", error);
+      res.status(500).json({ message: "Không thể lấy thống kê", error });
+    }
+  }
+);
 
 export default router;
 

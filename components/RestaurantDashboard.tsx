@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod } from '../types';
+import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStats, StatsPeriod } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users as UsersIcon, XCircle as XCircleIcon, Activity, Award, Zap } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 
 interface RestaurantDashboardProps {
   restaurant: Restaurant;
@@ -16,6 +16,7 @@ interface RestaurantDashboardProps {
   onDeleteMenuItem: (id: string) => Promise<void>;
   onUpdateRestaurant: (data: Partial<Restaurant>) => Promise<Restaurant>;
   onLogout: () => void;
+  onFetchStats?: (period: StatsPeriod, startDate?: string, endDate?: string) => Promise<RestaurantStats>;
 }
 
 export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
@@ -27,7 +28,8 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onUpdateOrderStatus,
   onDeleteMenuItem,
   onUpdateRestaurant,
-  onLogout
+  onLogout,
+  onFetchStats
 }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'bank' | 'settings'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
@@ -73,6 +75,14 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [bankAccountInput, setBankAccountInput] = useState(restaurant.bankAccount || '');
   const [bankNameInput, setBankNameInput] = useState(restaurant.bankName || '');
   const [isSavingBank, setIsSavingBank] = useState(false);
+
+  // Stats state
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('today');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [statsData, setStatsData] = useState<RestaurantStats | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   // Danh sách các ngân hàng phổ biến ở Việt Nam
   const banks = [
@@ -132,13 +142,37 @@ const AUTH_TOKEN_KEY = 'qr_food_order_token';
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-  // Stats Logic
+  // Stats Logic (legacy - for backward compatibility)
   const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
   const revenue = completedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
   const chartData = completedOrders.map(o => ({
       name: `Bàn ${o.tableNumber}`,
       amount: o.totalAmount
   })).slice(-10); // Last 10 orders
+
+  // Fetch stats when period changes
+  useEffect(() => {
+    if (onFetchStats && activeTab === 'stats') {
+      loadStats();
+    }
+  }, [statsPeriod, customStartDate, customEndDate, activeTab]);
+
+  const loadStats = async () => {
+    if (!onFetchStats) return;
+    try {
+      setIsLoadingStats(true);
+      setStatsError(null);
+      const startDate = statsPeriod === 'custom' ? customStartDate : undefined;
+      const endDate = statsPeriod === 'custom' ? customEndDate : undefined;
+      const data = await onFetchStats(statsPeriod, startDate, endDate);
+      setStatsData(data);
+    } catch (err) {
+      console.error('Error loading stats:', err);
+      setStatsError(err instanceof Error ? err.message : 'Không thể tải thống kê');
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
 
   const handleGenerateDescription = async () => {
     if (!newItem.name || !newItem.category) {
@@ -996,35 +1030,381 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
         {/* STATS TAB */}
         {activeTab === 'stats' && (
-             <div className="space-y-6">
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                         <p className="text-sm text-gray-500">Doanh thu tạm tính</p>
-                         <h3 className="text-3xl font-bold text-brand-600">{revenue.toLocaleString('vi-VN')}đ</h3>
-                     </div>
-                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                         <p className="text-sm text-gray-500">Đơn hoàn thành</p>
-                         <h3 className="text-3xl font-bold text-blue-600">{completedOrders.length}</h3>
-                     </div>
-                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                         <p className="text-sm text-gray-500">Món đang phục vụ</p>
-                         <h3 className="text-3xl font-bold text-gray-800">{menu.length}</h3>
-                     </div>
-                 </div>
+          <div className="space-y-6">
+            {/* Filter UI */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Chọn kỳ thống kê</label>
+                  <select
+                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                    value={statsPeriod}
+                    onChange={(e) => setStatsPeriod(e.target.value as StatsPeriod)}
+                  >
+                    <option value="today">Hôm nay</option>
+                    <option value="week">Tuần này</option>
+                    <option value="month">Tháng này</option>
+                    <option value="year">Năm này</option>
+                    <option value="custom">Tùy chọn</option>
+                  </select>
+                </div>
+                {statsPeriod === 'custom' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Từ ngày</label>
+                      <input
+                        type="date"
+                        className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Đến ngày</label>
+                      <input
+                        type="date"
+                        className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+                <Button onClick={loadStats} disabled={isLoadingStats || (statsPeriod === 'custom' && (!customStartDate || !customEndDate))}>
+                  {isLoadingStats ? 'Đang tải...' : 'Tải thống kê'}
+                </Button>
+              </div>
+            </div>
 
-                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-80">
-                     <h3 className="text-lg font-bold mb-4">Giá trị đơn hàng gần đây</h3>
-                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="name" hide />
-                            <YAxis />
-                            <Tooltip formatter={(value) => `${Number(value).toLocaleString()}đ`} />
-                            <Bar dataKey="amount" fill="#ea580c" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                     </ResponsiveContainer>
-                 </div>
-             </div>
+            {/* Loading State */}
+            {isLoadingStats && (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+                <p className="mt-2 text-gray-500">Đang tải thống kê...</p>
+              </div>
+            )}
+
+            {/* Error State */}
+            {statsError && !isLoadingStats && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-red-800">{statsError}</p>
+              </div>
+            )}
+
+            {/* Stats Content */}
+            {!isLoadingStats && !statsError && statsData && (
+              <>
+                {/* KPI Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Doanh thu tổng */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Doanh thu tổng</p>
+                      <DollarSign className="w-5 h-5 text-green-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-brand-600 mb-1">
+                      {statsData.overview.totalRevenue.toLocaleString('vi-VN')}đ
+                    </h3>
+                    {statsData.overview.revenueChange !== null && statsData.overview.revenueChange !== 0 && (
+                      <div className={`flex items-center text-sm ${statsData.overview.revenueChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {statsData.overview.revenueChange > 0 ? (
+                          <TrendingUp className="w-4 h-4 mr-1" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 mr-1" />
+                        )}
+                        {Math.abs(statsData.overview.revenueChange).toFixed(1)}% so với kỳ trước
+                      </div>
+                    )}
+                    {statsData.overview.revenueChange === null && statsData.overview.totalRevenue > 0 && (
+                      <div className="flex items-center text-sm text-blue-600">
+                        <Sparkles className="w-4 h-4 mr-1" />
+                        Không có dữ liệu kỳ trước
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tổng đơn hàng */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Tổng đơn hàng</p>
+                      <ShoppingCart className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-blue-600 mb-1">{statsData.overview.totalOrders}</h3>
+                    {statsData.overview.ordersChange !== null && statsData.overview.ordersChange !== 0 && (
+                      <div className={`flex items-center text-sm ${statsData.overview.ordersChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {statsData.overview.ordersChange > 0 ? (
+                          <TrendingUp className="w-4 h-4 mr-1" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 mr-1" />
+                        )}
+                        {Math.abs(statsData.overview.ordersChange).toFixed(1)}% so với kỳ trước
+                      </div>
+                    )}
+                    {statsData.overview.ordersChange === null && statsData.overview.totalOrders > 0 && (
+                      <div className="flex items-center text-sm text-blue-600">
+                        <Sparkles className="w-4 h-4 mr-1" />
+                        Không có dữ liệu kỳ trước
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Doanh thu trung bình/đơn */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Doanh thu TB/đơn</p>
+                      <Activity className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-purple-600 mb-1">
+                      {statsData.overview.averageOrderValue.toLocaleString('vi-VN')}đ
+                    </h3>
+                    {statsData.overview.previousAverageOrderValue > 0 && (
+                      <div className={`flex items-center text-sm ${
+                        statsData.overview.averageOrderValue > statsData.overview.previousAverageOrderValue ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {statsData.overview.averageOrderValue > statsData.overview.previousAverageOrderValue ? (
+                          <TrendingUp className="w-4 h-4 mr-1" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 mr-1" />
+                        )}
+                        {Math.abs(((statsData.overview.averageOrderValue - statsData.overview.previousAverageOrderValue) / statsData.overview.previousAverageOrderValue) * 100).toFixed(1)}% so với kỳ trước
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Số khách hàng */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Số khách hàng</p>
+                      <UsersIcon className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-indigo-600">{statsData.overview.totalCustomers}</h3>
+                  </div>
+
+                  {/* Tỷ lệ hủy đơn */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Tỷ lệ hủy đơn</p>
+                      <XCircleIcon className="w-5 h-5 text-red-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-red-600">{statsData.overview.cancellationRate.toFixed(1)}%</h3>
+                  </div>
+
+                  {/* Thời gian xử lý trung bình */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Thời gian xử lý TB</p>
+                      <Timer className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-orange-600">{statsData.overview.averageProcessingTime} phút</h3>
+                  </div>
+
+                  {/* Món bán chạy nhất */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Món bán chạy nhất</p>
+                      <Award className="w-5 h-5 text-yellow-600" />
+                    </div>
+                    {statsData.overview.topSellingItem ? (
+                      <>
+                        <h3 className="text-xl font-bold text-gray-900 line-clamp-1">{statsData.overview.topSellingItem.name}</h3>
+                        <p className="text-sm text-gray-500 mt-1">{statsData.overview.topSellingItem.quantity} phần</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-400">Chưa có dữ liệu</p>
+                    )}
+                  </div>
+
+                  {/* Giờ cao điểm */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-gray-500">Giờ cao điểm</p>
+                      <Zap className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-amber-600">{statsData.overview.peakHour}:00</h3>
+                  </div>
+                </div>
+
+                {/* Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Doanh thu theo ngày (Line Chart) */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-bold mb-4">Doanh thu theo ngày</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={statsData.revenueByDate}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tickFormatter={(value) => new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })} />
+                        <YAxis />
+                        <Tooltip 
+                          formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`}
+                          labelFormatter={(label) => new Date(label).toLocaleDateString('vi-VN')}
+                        />
+                        <Line type="monotone" dataKey="revenue" stroke="#4F46E5" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Doanh thu theo giờ (Area Chart) */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-bold mb-4">Doanh thu theo giờ</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={statsData.revenueByHour}>
+                        <defs>
+                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#4F46E5" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="hour" />
+                        <YAxis />
+                        <Tooltip formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`} />
+                        <Area type="monotone" dataKey="revenue" stroke="#4F46E5" fillOpacity={1} fill="url(#colorRevenue)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Top 10 món bán chạy (Horizontal Bar Chart) */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-bold mb-4">Top 10 món bán chạy</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={statsData.topMenuItems.slice(0, 10).reverse()} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value: number) => `${value} phần`} />
+                        <Bar dataKey="quantity" fill="#ea580c" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Phân bổ theo danh mục (Pie Chart) */}
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 className="text-lg font-bold mb-4">Phân bổ theo danh mục</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={statsData.revenueByCategory}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ category, percent }) => `${category} ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="revenue"
+                        >
+                          {statsData.revenueByCategory.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={['#4F46E5', '#ea580c', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 6]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value: number) => `${value.toLocaleString('vi-VN')}đ`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tables Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Top món bán chạy table */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-brand-500 to-brand-600 px-6 py-4">
+                      <h3 className="text-lg font-bold text-white">Top món bán chạy</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">STT</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên món</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Số lượng</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Doanh thu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {statsData.topMenuItems.slice(0, 10).map((item, index) => (
+                            <tr key={item.menuItemId} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600 text-right">{item.quantity}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{item.revenue.toLocaleString('vi-VN')}đ</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Top bàn table */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+                      <h3 className="text-lg font-bold text-white">Top bàn</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">STT</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số bàn</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Số đơn</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Doanh thu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {statsData.revenueByTable.slice(0, 10).map((table, index) => (
+                            <tr key={table.tableNumber} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">Bàn {table.tableNumber}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600 text-right">{table.orders}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{table.revenue.toLocaleString('vi-VN')}đ</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Đơn hàng lớn nhất table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+                    <h3 className="text-lg font-bold text-white">Đơn hàng lớn nhất</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">STT</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bàn</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Khách hàng</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tổng tiền</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thời gian</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {statsData.largestOrders.slice(0, 10).map((order, index) => (
+                          <tr key={order.orderId} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">{index + 1}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">Bàn {order.tableNumber}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{order.customerName || 'Khách vãng lai'}</td>
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{order.totalAmount.toLocaleString('vi-VN')}đ</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(order.createdAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Empty State */}
+            {!isLoadingStats && !statsError && !statsData && (
+              <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
+                <p className="text-gray-500">Chưa có dữ liệu thống kê. Vui lòng chọn kỳ thống kê và nhấn "Tải thống kê".</p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* QR CODE TAB */}

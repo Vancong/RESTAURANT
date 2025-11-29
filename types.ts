@@ -117,3 +117,74 @@ export interface RestaurantRevenueStats {
     revenue: number;
   }>;
 }
+
+export type StatsPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+export interface RestaurantStats {
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+  previousPeriod: {
+    startDate: string;
+    endDate: string;
+  };
+  overview: {
+    totalRevenue: number;
+    previousRevenue: number;
+    revenueChange: number | null; // null if no previous data to compare
+    totalOrders: number;
+    previousOrders: number;
+    ordersChange: number | null; // null if no previous data to compare
+    averageOrderValue: number;
+    previousAverageOrderValue: number;
+    totalCustomers: number;
+    cancellationRate: number;
+    averageProcessingTime: number;
+    topSellingItem: {
+      name: string;
+      quantity: number;
+    } | null;
+    peakHour: number;
+  };
+  revenueByDate: Array<{
+    date: string;
+    revenue: number;
+    orders: number;
+  }>;
+  revenueByHour: Array<{
+    hour: number;
+    revenue: number;
+    orders: number;
+  }>;
+  topMenuItems: Array<{
+    menuItemId: string;
+    name: string;
+    quantity: number;
+    revenue: number;
+  }>;
+  revenueByCategory: Array<{
+    category: string;
+    revenue: number;
+    quantity: number;
+  }>;
+  revenueByTable: Array<{
+    tableNumber: string;
+    revenue: number;
+    orders: number;
+  }>;
+  ordersByStatus: {
+    pending: number;
+    confirmed: number;
+    served: number;
+    completed: number;
+    cancelled: number;
+  };
+  largestOrders: Array<{
+    orderId: string;
+    tableNumber: string;
+    totalAmount: number;
+    customerName?: string;
+    createdAt: Date | string;
+  }>;
+}
