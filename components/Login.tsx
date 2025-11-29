@@ -3,13 +3,13 @@ import { Button } from './Button';
 import { ChefHat, Lock, User } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (username: string, password: string) => void;
+  onLogin: (identifier: string, password: string) => void;
   error?: string;
   onRequestPasswordReset: (email: string) => Promise<void> | void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin, error, onRequestPasswordReset }) => {
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
@@ -19,7 +19,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, error, onRequestPasswordR
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(username, password);
+    onLogin(identifier, password);
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
@@ -64,17 +64,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin, error, onRequestPasswordR
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tên đăng nhập</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tên đăng nhập hoặc Email</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <User className="h-5 w-5 text-gray-400" />
               </div>
               <input
                 type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="pl-10 block w-full border border-gray-300 rounded-lg py-2 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                placeholder="admin"
+                placeholder="admin hoặc email@domain.com"
                 required
               />
             </div>

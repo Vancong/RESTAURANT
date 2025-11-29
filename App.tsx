@@ -107,12 +107,12 @@ const App: React.FC = () => {
   };
 
   // Actions
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (identifier: string, password: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ identifier, password })
       });
 
       if (!response.ok) {

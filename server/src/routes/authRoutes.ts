@@ -20,13 +20,35 @@ const APP_BASE_URL =
   "http://localhost:5173";
 
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { identifier, password } = req.body as {
+    identifier?: string;
+    password?: string;
+  };
 
-  if (!username || !password) {
-    return res.status(400).json({ message: "Thiếu username hoặc password" });
+  if (!identifier || !password) {
+    return res
+      .status(400)
+      .json({ message: "Thiếu tên đăng nhập/email hoặc password" });
   }
 
-  const user = await User.findOne({ username });
+  const trimmedIdentifier = identifier.trim();
+  const normalized = trimmedIdentifier.toLowerCase();
+
+  let user = await User.findOne({ username: trimmedIdentifier });
+
+  if (!user) {
+    user = await User.findOne({ username: normalized });
+  }
+
+  if (!user) {
+    const restaurant = await Restaurant.findOne({ email: normalized });
+    if (restaurant) {
+      user = await User.findOne({
+        restaurantId: restaurant._id,
+        role: UserRole.RESTAURANT_ADMIN
+      });
+    }
+  }
 
   if (!user) {
     return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
