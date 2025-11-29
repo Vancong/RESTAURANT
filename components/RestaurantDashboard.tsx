@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
+import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
 import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -30,6 +31,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'settings'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
+  const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
   const [isChangePwOpen, setIsChangePwOpen] = useState(false);
@@ -399,7 +401,16 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         <Button size="sm" variant="secondary" onClick={() => onUpdateOrderStatus(order.id, OrderStatus.SERVED)}>Đã ra món</Button>
                     )}
                     {order.status === OrderStatus.SERVED && (
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => onUpdateOrderStatus(order.id, OrderStatus.COMPLETED)}>Thanh toán</Button>
+                        <Button 
+                          size="sm" 
+                          className="bg-green-600 hover:bg-green-700" 
+                          onClick={() => {
+                            // Chỉ hiển thị hóa đơn, không cập nhật status ngay
+                            setSelectedOrderForInvoice(order);
+                          }}
+                        >
+                          Thanh toán
+                        </Button>
                     )}
                     {(order.status === OrderStatus.PENDING || order.status === OrderStatus.CONFIRMED) && (
                          <Button size="sm" variant="danger" onClick={() => onUpdateOrderStatus(order.id, OrderStatus.CANCELLED)}>Hủy</Button>
@@ -1408,6 +1419,19 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             </form>
           </div>
         </div>
+      )}
+
+      {/* Invoice Modal */}
+      {selectedOrderForInvoice && (
+        <Invoice
+          order={selectedOrderForInvoice}
+          restaurant={restaurant}
+          onClose={() => setSelectedOrderForInvoice(null)}
+          onConfirm={() => {
+            // Cập nhật status thành COMPLETED khi xác nhận đã in
+            onUpdateOrderStatus(selectedOrderForInvoice.id, OrderStatus.COMPLETED);
+          }}
+        />
       )}
     </div>
   );

@@ -1,0 +1,290 @@
+import React, { useState } from 'react';
+import { Order, Restaurant } from '../types';
+import { Printer, X, CheckCircle } from 'lucide-react';
+import { Button } from './Button';
+
+interface InvoiceProps {
+  order: Order;
+  restaurant: Restaurant;
+  onClose: () => void;
+  onConfirm: () => void; // Xác nhận đã in và hoàn thành đơn hàng
+}
+
+export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, onConfirm }) => {
+  const [hasPrinted, setHasPrinted] = useState(false);
+
+  const handlePrint = () => {
+    window.print();
+    setHasPrinted(true);
+  };
+
+  // Debug: Kiểm tra dữ liệu
+  if (!order || !restaurant) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl p-6">
+          <p className="text-red-600">Lỗi: Thiếu thông tin đơn hàng hoặc nhà hàng</p>
+          <Button onClick={onClose} className="mt-4">Đóng</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const orderDate = new Date(order.timestamp);
+  const formattedDate = orderDate.toLocaleDateString('vi-VN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  const formattedTime = orderDate.toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return (
+    <>
+      {/* Bản copy cho in - chỉ hiển thị khi in */}
+      <div className="invoice-print-only" style={{ display: 'none' }}>
+        <div style={{ padding: '2cm', fontFamily: 'Arial, sans-serif' }}>
+          {/* Thông tin nhà hàng */}
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>{restaurant.name}</h1>
+            <p style={{ fontSize: '14px', color: '#666' }}>{restaurant.address}</p>
+            <p style={{ fontSize: '14px', color: '#666' }}>ĐT: {restaurant.phone}</p>
+          </div>
+
+          {/* Thông tin đơn hàng */}
+          <div style={{ borderTop: '1px solid #ddd', borderBottom: '1px solid #ddd', padding: '15px 0', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
+              <span style={{ color: '#666' }}>Bàn số:</span>
+              <span style={{ fontWeight: 'bold' }}>{order.tableNumber}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
+              <span style={{ color: '#666' }}>Ngày:</span>
+              <span style={{ fontWeight: 'bold' }}>{formattedDate}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+              <span style={{ color: '#666' }}>Giờ:</span>
+              <span style={{ fontWeight: 'bold' }}>{formattedTime}</span>
+            </div>
+          </div>
+
+          {/* Danh sách món */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #ddd' }}>
+                <th style={{ textAlign: 'left', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}>Tên món</th>
+                <th style={{ textAlign: 'center', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}>SL</th>
+                <th style={{ textAlign: 'right', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}>Đơn giá</th>
+                <th style={{ textAlign: 'right', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}>Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              {order.items.map((item, idx) => (
+                <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '10px', fontSize: '14px' }}>{item.name}</td>
+                  <td style={{ textAlign: 'center', padding: '10px', fontSize: '14px' }}>{item.quantity}</td>
+                  <td style={{ textAlign: 'right', padding: '10px', fontSize: '14px' }}>
+                    {item.price.toLocaleString('vi-VN')}đ
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '10px', fontSize: '14px', fontWeight: 'bold' }}>
+                    {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Ghi chú nếu có */}
+          {order.note && (
+            <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#fffbf0', border: '1px solid #f0e68c', borderRadius: '5px' }}>
+              <p style={{ fontSize: '14px', color: '#856404' }}>
+                <span style={{ fontWeight: 'bold' }}>Ghi chú: </span>
+                {order.note}
+              </p>
+            </div>
+          )}
+
+          {/* Tổng tiền */}
+          <div style={{ borderTop: '2px solid #333', paddingTop: '15px', marginTop: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Tổng cộng:</span>
+              <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#2563eb' }}>
+                {order.totalAmount.toLocaleString('vi-VN')}đ
+              </span>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
+            <p>Cảm ơn quý khách đã sử dụng dịch vụ!</p>
+            <p style={{ marginTop: '5px' }}>Hẹn gặp lại quý khách lần sau</p>
+          </div>
+        </div>
+      </div>
+      
+      {/* Overlay cho màn hình */}
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden">
+        <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          {/* Header với nút đóng */}
+          <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center print:hidden">
+            <h2 className="text-xl font-bold text-gray-900">Hóa đơn</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Nội dung hóa đơn */}
+          <div className="p-6">
+            {/* Thông tin nhà hàng */}
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">{restaurant.name}</h1>
+              <p className="text-sm text-gray-600">{restaurant.address}</p>
+              <p className="text-sm text-gray-600">ĐT: {restaurant.phone}</p>
+            </div>
+
+            {/* Thông tin đơn hàng */}
+            <div className="border-t border-b border-gray-200 py-4 mb-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-600">Bàn số:</span>
+                <span className="font-semibold">{order.tableNumber}</span>
+              </div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-600">Ngày:</span>
+                <span className="font-semibold">{formattedDate}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Giờ:</span>
+                <span className="font-semibold">{formattedTime}</span>
+              </div>
+            </div>
+
+            {/* Danh sách món */}
+            <div className="mb-4">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 text-sm font-semibold text-gray-700">Tên món</th>
+                    <th className="text-center py-2 text-sm font-semibold text-gray-700">SL</th>
+                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Đơn giá</th>
+                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((item, idx) => (
+                    <tr key={idx} className="border-b border-gray-100">
+                      <td className="py-3 text-sm text-gray-900">{item.name}</td>
+                      <td className="py-3 text-center text-sm text-gray-700">{item.quantity}</td>
+                      <td className="py-3 text-right text-sm text-gray-700">
+                        {item.price.toLocaleString('vi-VN')}đ
+                      </td>
+                      <td className="py-3 text-right text-sm font-semibold text-gray-900">
+                        {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Ghi chú nếu có */}
+            {order.note && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <span className="font-semibold">Ghi chú: </span>
+                  {order.note}
+                </p>
+              </div>
+            )}
+
+            {/* Tổng tiền */}
+            <div className="border-t-2 border-gray-300 pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900">Tổng cộng:</span>
+                <span className="text-2xl font-bold text-brand-600">
+                  {order.totalAmount.toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-8 text-center text-xs text-gray-500">
+              <p>Cảm ơn quý khách đã sử dụng dịch vụ!</p>
+              <p className="mt-1">Hẹn gặp lại quý khách lần sau</p>
+            </div>
+          </div>
+
+          {/* Nút in - chỉ hiển thị khi không in */}
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex justify-end gap-3 print:hidden">
+            {!hasPrinted ? (
+              <>
+                <Button variant="secondary" onClick={onClose} disabled>
+                  Đóng
+                </Button>
+                <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700">
+                  <Printer className="w-4 h-4 mr-2" />
+                  In hóa đơn
+                </Button>
+                <p className="text-xs text-gray-500 self-center mr-2">
+                  Vui lòng in hóa đơn trước khi hoàn thành đơn hàng
+                </p>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={onClose}>
+                  Đóng (không hoàn thành)
+                </Button>
+                <Button 
+                  onClick={() => {
+                    onConfirm();
+                    onClose();
+                  }}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Xác nhận đã in và hoàn thành đơn hàng
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* CSS cho in */}
+      <style>{`
+        @media print {
+          @page {
+            margin: 1.5cm;
+            size: A4;
+          }
+          
+          /* Ẩn tất cả trừ nội dung in */
+          body * {
+            visibility: hidden;
+          }
+          
+          .invoice-print-only,
+          .invoice-print-only * {
+            visibility: visible !important;
+          }
+          
+          .invoice-print-only {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            display: block !important;
+          }
+          
+          /* Ẩn các phần không cần in */
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
+    </>
+  );
+};
