@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Order, Restaurant } from '../types';
+import { Order, Restaurant, PaymentMethod } from '../types';
 import { Printer, X, CheckCircle } from 'lucide-react';
 import { Button } from './Button';
 
@@ -7,11 +7,12 @@ interface InvoiceProps {
   order: Order;
   restaurant: Restaurant;
   onClose: () => void;
-  onConfirm: () => void; // Xác nhận đã in và hoàn thành đơn hàng
+  onConfirm: (paymentMethod: PaymentMethod) => void; // Xác nhận đã in và hoàn thành đơn hàng với hình thức thanh toán
 }
 
 export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, onConfirm }) => {
   const [hasPrinted, setHasPrinted] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
 
   const handlePrint = () => {
     window.print();
@@ -121,7 +122,8 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
   // Format: https://img.vietqr.io/image/{bankCode}-{accountNumber}-{template}.jpg?amount={amount}&addInfo={content}
   // Template: compact, compact2, qr_only, print
   // API này tạo QR code đúng chuẩn VietQR và có thể quét được bằng app ngân hàng
-  const qrImageUrl = restaurant.bankAccount && bankCode
+  // Chỉ tạo QR code khi chọn hình thức chuyển khoản
+  const qrImageUrl = (paymentMethod === PaymentMethod.BANK_TRANSFER && restaurant.bankAccount && bankCode)
     ? `https://img.vietqr.io/image/${bankCode}-${accountNumber}-compact2.jpg?amount=${amount}&addInfo=${encodeURIComponent(`Ban ${order.tableNumber}`)}`
     : null;
 
@@ -209,8 +211,8 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
             </div>
           </div>
 
-          {/* QR Code thanh toán */}
-          {restaurant.bankAccount ? (
+          {/* QR Code thanh toán - chỉ hiển thị khi chọn chuyển khoản */}
+          {paymentMethod === PaymentMethod.BANK_TRANSFER && restaurant.bankAccount ? (
             qrImageUrl ? (
               <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
                 <p style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>Quét mã QR để thanh toán</p>
@@ -354,8 +356,37 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
               </div>
             </div>
 
-            {/* QR Code thanh toán */}
-            {restaurant.bankAccount ? (
+            {/* Chọn hình thức thanh toán */}
+            <div className="mt-6 p-4 border border-gray-200 rounded-lg">
+              <p className="text-sm font-semibold text-gray-700 mb-3">Hình thức thanh toán:</p>
+              <div className="flex gap-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={PaymentMethod.CASH}
+                    checked={paymentMethod === PaymentMethod.CASH}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="mr-2 w-4 h-4 text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="text-sm text-gray-700">Tiền mặt</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={PaymentMethod.BANK_TRANSFER}
+                    checked={paymentMethod === PaymentMethod.BANK_TRANSFER}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="mr-2 w-4 h-4 text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="text-sm text-gray-700">Chuyển khoản</span>
+                </label>
+              </div>
+            </div>
+
+            {/* QR Code thanh toán - chỉ hiển thị khi chọn chuyển khoản */}
+            {paymentMethod === PaymentMethod.BANK_TRANSFER && restaurant.bankAccount ? (
               qrImageUrl ? (
                 <div className="mt-6 p-4 border border-gray-200 rounded-lg text-center">
                   <p className="text-sm font-bold mb-3">Quét mã QR để thanh toán</p>
@@ -431,7 +462,7 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
                 </Button>
                 <Button 
                   onClick={() => {
-                    onConfirm();
+                    onConfirm(paymentMethod);
                     onClose();
                   }}
                   className="bg-green-600 hover:bg-green-700"

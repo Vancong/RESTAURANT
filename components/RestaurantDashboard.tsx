@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
+import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
@@ -12,7 +12,7 @@ interface RestaurantDashboardProps {
   orders: Order[];
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => Promise<void>;
   onUpdateMenuItem: (id: string, data: Partial<MenuItem>) => Promise<void>;
-  onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  onUpdateOrderStatus: (orderId: string, status: OrderStatus, paymentMethod?: PaymentMethod) => void;
   onDeleteMenuItem: (id: string) => Promise<void>;
   onUpdateRestaurant: (data: Partial<Restaurant>) => Promise<Restaurant>;
   onLogout: () => void;
@@ -515,6 +515,16 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           <Clock className="w-3.5 h-3.5" />
                           <span>{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
                         </div>
+                        {order.status === OrderStatus.COMPLETED && order.paymentMethod && (
+                          <div className="flex items-center gap-1">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>
+                              Thanh toán: <span className="font-semibold text-brand-600">
+                                {order.paymentMethod === PaymentMethod.CASH ? 'Tiền mặt' : 'Chuyển khoản'}
+                              </span>
+                            </span>
+                          </div>
+                        )}
                         {order.updatedByName && (
                           <div className="flex items-center gap-1">
                             <User className="w-3.5 h-3.5" />
@@ -749,15 +759,34 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           )}
 
                           {/* Footer info */}
-                          <div className="flex items-center justify-between text-xs mb-3 pb-3 border-b border-gray-200">
-                            <div className="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1.5 rounded-lg">
-                              <Clock className="w-3.5 h-3.5 text-blue-600" />
-                              <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <div className="space-y-2 mb-3 pb-3 border-b border-gray-200">
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1.5 rounded-lg">
+                                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              {order.updatedByName && (
+                                <div className="flex items-center gap-1.5 bg-green-50 px-2.5 py-1.5 rounded-lg">
+                                  <User className="w-3.5 h-3.5 text-green-600" />
+                                  <span className="font-bold text-green-700">{order.updatedByName}</span>
+                                </div>
+                              )}
                             </div>
-                            {order.updatedByName && (
-                              <div className="flex items-center gap-1.5 bg-green-50 px-2.5 py-1.5 rounded-lg">
-                                <User className="w-3.5 h-3.5 text-green-600" />
-                                <span className="font-bold text-green-700">{order.updatedByName}</span>
+                            {order.paymentMethod && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-600 font-medium">Hình thức thanh toán:</span>
+                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs ${
+                                  order.paymentMethod === PaymentMethod.CASH
+                                    ? 'bg-gradient-to-r from-purple-100 to-purple-50 text-purple-700 border border-purple-200'
+                                    : 'bg-gradient-to-r from-indigo-100 to-indigo-50 text-indigo-700 border border-indigo-200'
+                                }`}>
+                                  <CreditCard className={`w-3.5 h-3.5 ${
+                                    order.paymentMethod === PaymentMethod.CASH ? 'text-purple-600' : 'text-indigo-600'
+                                  }`} />
+                                  <span>
+                                    {order.paymentMethod === PaymentMethod.CASH ? '💵 Tiền mặt' : '🏦 Chuyển khoản'}
+                                  </span>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -2037,9 +2066,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
           order={selectedOrderForInvoice}
           restaurant={restaurant}
           onClose={() => setSelectedOrderForInvoice(null)}
-          onConfirm={() => {
-            // Cập nhật status thành COMPLETED khi xác nhận đã in
-            onUpdateOrderStatus(selectedOrderForInvoice.id, OrderStatus.COMPLETED);
+          onConfirm={(paymentMethod) => {
+            // Cập nhật status thành COMPLETED khi xác nhận đã in với hình thức thanh toán
+            onUpdateOrderStatus(selectedOrderForInvoice.id, OrderStatus.COMPLETED, paymentMethod);
           }}
         />
       )}

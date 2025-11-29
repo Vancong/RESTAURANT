@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initialOrders } from './services/mockData';
-import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role, NewRestaurantPayload, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from './types';
+import { CartItem, MenuItem, Order, OrderStatus, PaymentMethod, Restaurant, Role, NewRestaurantPayload, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
@@ -209,6 +209,7 @@ const App: React.FC = () => {
           timestamp: new Date(o.createdAt).getTime(),
           note: o.note,
           customerName: o.customerName,
+          paymentMethod: o.paymentMethod as PaymentMethod | undefined,
           confirmedByName: o.confirmedByName,
           updatedByName: o.updatedByName
         }));
@@ -483,15 +484,19 @@ const App: React.FC = () => {
     }
   };
 
-  const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+  const updateOrderStatus = async (orderId: string, status: OrderStatus, paymentMethod?: PaymentMethod) => {
     // Cập nhật local state ngay để UI responsive
     setOrders(prev => prev.map(o => 
-      o.id === orderId ? { ...o, status } : o
+      o.id === orderId ? { ...o, status, paymentMethod } : o
     ));
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
         throw new Error('Vui lòng đăng nhập lại');
+      }
+      const body: { status: OrderStatus; paymentMethod?: PaymentMethod } = { status };
+      if (paymentMethod) {
+        body.paymentMethod = paymentMethod;
       }
       const res = await fetch(`${API_BASE_URL}/api/staff/orders/${orderId}`, {
         method: 'PATCH',
@@ -499,7 +504,7 @@ const App: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify(body)
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -511,6 +516,7 @@ const App: React.FC = () => {
           ? { 
               ...o, 
               status: updated.status as OrderStatus,
+              paymentMethod: updated.paymentMethod as PaymentMethod | undefined,
               confirmedByName: updated.confirmedByName,
               updatedByName: updated.updatedByName
             } 

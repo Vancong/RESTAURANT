@@ -55,6 +55,11 @@ export enum OrderStatus {
   CANCELLED = 'CANCELLED'
 }
 
+export enum PaymentMethod {
+  CASH = 'CASH', // Tiền mặt
+  BANK_TRANSFER = 'BANK_TRANSFER' // Chuyển khoản
+}
+
 export interface OrderItem {
   menuItemId: string;
   name: string;
@@ -72,6 +77,7 @@ export interface Order {
   timestamp: number;
   note?: string;
   customerName?: string; // Tên khách hàng
+  paymentMethod?: PaymentMethod; // Hình thức thanh toán
   confirmedByName?: string; // Tên nhân viên đã xác nhận đơn
   updatedByName?: string; // Tên người cập nhật đơn hàng (bất kỳ trạng thái nào)
 }
