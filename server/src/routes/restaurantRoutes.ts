@@ -1,9 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import mongoose from "mongoose";
 import { Restaurant, RestaurantStatus } from "../models/Restaurant.js";
 import { User, UserRole } from "../models/User.js";
 import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
-import { sendNewRestaurantWelcomeEmail } from "../services/emailService.js";
+import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP } from "../services/emailService.js";
+import { EmailChangeToken } from "../models/EmailChangeToken.js";
 
 const router = Router();
 const APP_BASE_URL =
@@ -108,6 +110,94 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Restaurant Admin yêu cầu gửi OTP để đổi email
+router.post(
+  "/me/request-email-change",
+  requireAuth,
+  requireRole([UserRole.RESTAURANT_ADMIN] as string[]),
+  async (req: AuthRequest, res) => {
+    try {
+      const restaurantId = req.auth?.restaurantId;
+      if (!restaurantId) {
+        return res.status(403).json({ message: "Không xác định được nhà hàng" });
+      }
+
+      const { newEmail } = req.body as { newEmail?: string };
+      if (!newEmail) {
+        return res.status(400).json({ message: "Thiếu email mới" });
+      }
+
+      const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+      // Kiểm tra email mới có trùng với nhà hàng khác không
+      const existingRestaurant = await Restaurant.findOne({
+        email: normalizedNewEmail,
+        _id: { $ne: restaurantId }
+      });
+      if (existingRestaurant) {
+        return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
+      }
+
+      // Lấy thông tin restaurant hiện tại
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant) {
+        return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+      }
+
+      // Kiểm tra email mới có khác email cũ không
+      if (restaurant.email.toLowerCase() === normalizedNewEmail) {
+        return res.status(400).json({ message: "Email mới phải khác email hiện tại" });
+      }
+
+      // Tạo OTP 6 chữ số
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Lưu OTP vào database (hết hạn sau 15 phút)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // Xóa các OTP cũ chưa dùng của restaurant này
+      await EmailChangeToken.deleteMany({
+        restaurantId: new mongoose.Types.ObjectId(restaurantId),
+        used: false
+      });
+
+      await EmailChangeToken.create({
+        restaurantId: new mongoose.Types.ObjectId(restaurantId),
+        newEmail: normalizedNewEmail,
+        otp,
+        expiresAt,
+        used: false
+      });
+
+      // Gửi email chứa OTP đến email hiện tại
+      try {
+        await sendEmailChangeOTP({
+          to: restaurant.email,
+          restaurantName: restaurant.name,
+          ownerName: restaurant.ownerName,
+          otp,
+          newEmail: normalizedNewEmail
+        });
+      } catch (mailError) {
+        console.error("Không thể gửi email OTP đổi email", mailError);
+        return res.status(500).json({
+          message: "Không thể gửi email OTP. Vui lòng thử lại sau."
+        });
+      }
+
+      return res.json({
+        message: "Đã gửi mã OTP đến email hiện tại của nhà hàng"
+      });
+    } catch (error) {
+      console.error("Lỗi khi xử lý yêu cầu đổi email", error);
+      return res.status(500).json({
+        message: "Không thể xử lý yêu cầu đổi email"
+      });
+    }
+  }
+);
+
 // Restaurant Admin cập nhật thông tin nhà hàng của mình
 router.patch(
   "/me",
@@ -120,31 +210,70 @@ router.patch(
         return res.status(403).json({ message: "Không xác định được nhà hàng" });
       }
 
-      const { name, ownerName, email, address, phone } = req.body as {
+      const { name, ownerName, email, address, phone, emailChangeOtp } = req.body as {
         name?: string;
         ownerName?: string;
         email?: string;
         address?: string;
         phone?: string;
+        emailChangeOtp?: string;
       };
 
       const updates: Record<string, unknown> = {};
       if (name !== undefined) updates.name = name.trim();
       if (ownerName !== undefined) updates.ownerName = ownerName.trim();
-      if (email !== undefined) {
-        const normalizedEmail = email.trim().toLowerCase();
-        // Kiểm tra email có trùng với nhà hàng khác không
-        const existingRestaurant = await Restaurant.findOne({
-          email: normalizedEmail,
-          _id: { $ne: restaurantId }
-        });
-        if (existingRestaurant) {
-          return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
-        }
-        updates.email = normalizedEmail;
-      }
       if (address !== undefined) updates.address = address.trim();
       if (phone !== undefined) updates.phone = phone.trim();
+
+      // Xử lý đổi email - yêu cầu OTP
+      if (email !== undefined) {
+        const normalizedEmail = email.trim().toLowerCase();
+        
+        // Lấy restaurant hiện tại
+        const currentRestaurant = await Restaurant.findById(restaurantId);
+        if (!currentRestaurant) {
+          return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+        }
+
+        // Nếu email mới khác email cũ, yêu cầu OTP
+        if (currentRestaurant.email.toLowerCase() !== normalizedEmail) {
+          if (!emailChangeOtp) {
+            return res.status(400).json({ 
+              message: "Cần mã OTP để đổi email. Vui lòng yêu cầu gửi OTP trước." 
+            });
+          }
+
+          // Kiểm tra email có trùng với nhà hàng khác không
+          const existingRestaurant = await Restaurant.findOne({
+            email: normalizedEmail,
+            _id: { $ne: restaurantId }
+          });
+          if (existingRestaurant) {
+            return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
+          }
+
+          // Xác thực OTP
+          const tokenDoc = await EmailChangeToken.findOne({
+            restaurantId: new mongoose.Types.ObjectId(restaurantId),
+            newEmail: normalizedEmail,
+            otp: emailChangeOtp,
+            used: false,
+            expiresAt: { $gt: new Date() }
+          });
+
+          if (!tokenDoc) {
+            return res.status(400).json({
+              message: "Mã OTP không hợp lệ hoặc đã hết hạn"
+            });
+          }
+
+          // Đánh dấu OTP đã dùng
+          tokenDoc.used = true;
+          await tokenDoc.save();
+        }
+
+        updates.email = normalizedEmail;
+      }
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ message: "Không có thông tin nào để cập nhật" });
@@ -161,6 +290,90 @@ router.patch(
       res.json(restaurant);
     } catch (error) {
       res.status(400).json({ message: "Không thể cập nhật thông tin nhà hàng", error });
+    }
+  }
+);
+
+// Super Admin yêu cầu gửi OTP để đổi email nhà hàng
+router.post(
+  "/:id/request-email-change",
+  requireAuth,
+  requireRole(UserRole.SUPER_ADMIN),
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { newEmail } = req.body as { newEmail?: string };
+      if (!newEmail) {
+        return res.status(400).json({ message: "Thiếu email mới" });
+      }
+
+      const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+      // Kiểm tra email mới có trùng với nhà hàng khác không
+      const existingRestaurant = await Restaurant.findOne({
+        email: normalizedNewEmail,
+        _id: { $ne: id }
+      });
+      if (existingRestaurant) {
+        return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
+      }
+
+      // Lấy thông tin restaurant hiện tại
+      const restaurant = await Restaurant.findById(id);
+      if (!restaurant) {
+        return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+      }
+
+      // Kiểm tra email mới có khác email cũ không
+      if (restaurant.email.toLowerCase() === normalizedNewEmail) {
+        return res.status(400).json({ message: "Email mới phải khác email hiện tại" });
+      }
+
+      // Tạo OTP 6 chữ số
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Lưu OTP vào database (hết hạn sau 15 phút)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // Xóa các OTP cũ chưa dùng của restaurant này
+      await EmailChangeToken.deleteMany({
+        restaurantId: new mongoose.Types.ObjectId(id),
+        used: false
+      });
+
+      await EmailChangeToken.create({
+        restaurantId: new mongoose.Types.ObjectId(id),
+        newEmail: normalizedNewEmail,
+        otp,
+        expiresAt,
+        used: false
+      });
+
+      // Gửi email chứa OTP đến email hiện tại
+      try {
+        await sendEmailChangeOTP({
+          to: restaurant.email,
+          restaurantName: restaurant.name,
+          ownerName: restaurant.ownerName,
+          otp,
+          newEmail: normalizedNewEmail
+        });
+      } catch (mailError) {
+        console.error("Không thể gửi email OTP đổi email", mailError);
+        return res.status(500).json({
+          message: "Không thể gửi email OTP. Vui lòng thử lại sau."
+        });
+      }
+
+      return res.json({
+        message: "Đã gửi mã OTP đến email hiện tại của nhà hàng"
+      });
+    } catch (error) {
+      console.error("Lỗi khi xử lý yêu cầu đổi email", error);
+      return res.status(500).json({
+        message: "Không thể xử lý yêu cầu đổi email"
+      });
     }
   }
 );
@@ -187,9 +400,11 @@ router.patch("/:id", async (req, res) => {
     if (address !== undefined) updates.address = address.trim();
     if (phone !== undefined) updates.phone = phone.trim();
 
-    // Cập nhật email (kiểm tra trùng lặp)
+    // Cập nhật email (Super Admin không cần OTP, đổi trực tiếp)
     if (email !== undefined) {
       const normalizedEmail = email.trim().toLowerCase();
+      
+      // Kiểm tra email có trùng với nhà hàng khác không
       const existingRestaurant = await Restaurant.findOne({
         email: normalizedEmail,
         _id: { $ne: id }
@@ -197,6 +412,7 @@ router.patch("/:id", async (req, res) => {
       if (existingRestaurant) {
         return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
       }
+
       updates.email = normalizedEmail;
     }
 

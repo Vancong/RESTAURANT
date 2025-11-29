@@ -69,6 +69,7 @@ export interface Order {
   status: OrderStatus;
   timestamp: number;
   note?: string;
+  customerName?: string; // Tên khách hàng
   confirmedByName?: string; // Tên nhân viên đã xác nhận đơn
 }
 

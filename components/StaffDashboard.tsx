@@ -41,6 +41,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         status: o.status as OrderStatus,
         timestamp: new Date(o.createdAt).getTime(),
         note: o.note,
+        customerName: o.customerName,
         confirmedByName: o.confirmedByName
       }));
       setOrders(mapped);
@@ -134,6 +135,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3 flex-wrap">
                       <span className="font-bold text-lg">Bàn {order.tableNumber}</span>
+                      {order.customerName && (
+                        <span className="text-sm text-gray-600">- Khách: <span className="font-semibold text-brand-600">{order.customerName}</span></span>
+                      )}
                       {renderStatusBadge(order.status)}
                       <span className="text-gray-400 text-xs">
                         {new Date(order.timestamp).toLocaleTimeString()}

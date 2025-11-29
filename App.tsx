@@ -197,6 +197,7 @@ const App: React.FC = () => {
           status: o.status as OrderStatus,
           timestamp: new Date(o.createdAt).getTime(),
           note: o.note,
+          customerName: o.customerName,
           confirmedByName: o.confirmedByName
         }));
         setOrders(mapped);
@@ -504,7 +505,7 @@ const App: React.FC = () => {
     }
   };
 
-  const placeOrder = async (items: CartItem[], note: string) => {
+  const placeOrder = async (items: CartItem[], note: string, customerName: string) => {
     if (!currentRestaurantId || !customerTable) return;
     
     try {
@@ -515,12 +516,15 @@ const App: React.FC = () => {
       restaurantId: currentRestaurantId,
       tableNumber: customerTable,
       items,
-          note
+          note,
+          customerName
         })
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.message || 'Không thể đặt món');
+        const errorMessage = body?.message || 'Không thể đặt món';
+        alert(errorMessage);
+        throw new Error(errorMessage);
       }
       const created = await res.json();
       const newOrder: Order = {
@@ -531,7 +535,8 @@ const App: React.FC = () => {
         totalAmount: created.totalAmount,
         status: created.status as OrderStatus,
         timestamp: new Date(created.createdAt).getTime(),
-        note: created.note
+        note: created.note,
+        customerName: created.customerName
       };
       setOrders(prev => [newOrder, ...prev]);
     } catch (err) {
@@ -601,7 +606,7 @@ const App: React.FC = () => {
     }
   };
 
-  const updateRestaurant = async (data: Partial<Restaurant>) => {
+  const updateRestaurant = async (data: Partial<Restaurant> & { emailChangeOtp?: string }) => {
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
@@ -618,7 +623,8 @@ const App: React.FC = () => {
           ownerName: data.ownerName,
           email: data.email,
           address: data.address,
-          phone: data.phone
+          phone: data.phone,
+          emailChangeOtp: data.emailChangeOtp
         })
       });
       const body = await res.json().catch(() => null);

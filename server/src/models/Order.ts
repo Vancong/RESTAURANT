@@ -22,6 +22,7 @@ export interface IOrder extends Document {
   totalAmount: number;
   status: OrderStatus;
   note?: string;
+  customerName?: string; // Tên khách hàng
   confirmedBy?: Types.ObjectId; // ID nhân viên đã xác nhận đơn
   confirmedByName?: string; // Tên nhân viên đã xác nhận (để hiển thị nhanh)
 }
@@ -61,6 +62,10 @@ const OrderSchema = new Schema<IOrder>(
       required: true
     },
     note: {
+      type: String,
+      trim: true
+    },
+    customerName: {
       type: String,
       trim: true
     },

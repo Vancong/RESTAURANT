@@ -8,7 +8,7 @@ interface CustomerViewProps {
   restaurant: Restaurant;
   tableNumber: string;
   menu: MenuItem[];
-  onPlaceOrder: (items: CartItem[], note: string) => void;
+  onPlaceOrder: (items: CartItem[], note: string, customerName: string) => void;
   existingOrders: Order[];
 }
 
@@ -23,6 +23,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [orderNote, setOrderNote] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [chefSuggestion, setChefSuggestion] = useState<string>('');
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
 
@@ -76,13 +77,22 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleCheckout = () => {
-    onPlaceOrder(cart, orderNote);
-    setCart([]);
-    setOrderNote('');
-    setIsCartOpen(false);
-    setChefSuggestion('');
-    alert("Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.");
+  const handleCheckout = async () => {
+    if (!customerName.trim()) {
+      alert('Vui lòng nhập tên của bạn');
+      return;
+    }
+    try {
+      await onPlaceOrder(cart, orderNote, customerName.trim());
+      setCart([]);
+      setOrderNote('');
+      setCustomerName('');
+      setIsCartOpen(false);
+      setChefSuggestion('');
+      alert("Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.");
+    } catch (err) {
+      // Lỗi đã được xử lý trong onPlaceOrder, không cần làm gì thêm
+    }
   };
 
   // Group existing orders by status
@@ -216,15 +226,28 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
                 </div>
               ))}
               
-              <div className="pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Ghi chú cho nhà bếp</label>
-                  <textarea 
-                    value={orderNote}
-                    onChange={(e) => setOrderNote(e.target.value)}
-                    placeholder="VD: Không cay, ít đường, dị ứng đậu phộng..."
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                    rows={3}
-                  />
+              <div className="pt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nhập tên <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="VD: Nguyễn Văn A"
+                      className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ghi chú cho nhà bếp</label>
+                    <textarea 
+                      value={orderNote}
+                      onChange={(e) => setOrderNote(e.target.value)}
+                      placeholder="VD: Không cay, ít đường, dị ứng đậu phộng..."
+                      className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      rows={3}
+                    />
+                  </div>
               </div>
             </div>
 

@@ -140,3 +140,173 @@ export const sendNewRestaurantWelcomeEmail = async ({
   });
 };
 
+export interface EmailChangeMailParams {
+  to: string;
+  restaurantName: string;
+  ownerName?: string;
+  otp: string;
+  newEmail: string;
+}
+
+export const sendEmailChangeOTP = async ({
+  to,
+  restaurantName,
+  ownerName,
+  otp,
+  newEmail
+}: EmailChangeMailParams) => {
+  if (!SMTP_HOST) {
+    throw new Error("SMTP_HOST chưa được cấu hình");
+  }
+
+  const from = MAIL_FROM || SMTP_USER || "no-reply@example.com";
+  const greeting = ownerName ? `Anh/chị ${ownerName}` : restaurantName;
+
+  const text = [
+    `Xin chào ${greeting},`,
+    "",
+    "Hệ thống nhận được yêu cầu đổi email cho nhà hàng của bạn.",
+    `Email mới: ${newEmail}`,
+    "",
+    "Vui lòng sử dụng mã OTP dưới đây để xác thực đổi email:",
+    `Mã OTP: ${otp}`,
+    "",
+    "Lưu ý: mã OTP chỉ có hiệu lực trong 15 phút.",
+    "",
+    "Nếu bạn không yêu cầu đổi email, vui lòng bỏ qua email này và liên hệ với quản trị viên."
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <p>Xin chào <strong>${greeting}</strong>,</p>
+      <p>Hệ thống nhận được yêu cầu đổi email cho nhà hàng của bạn.</p>
+      <p><strong>Email mới:</strong> ${newEmail}</p>
+      <p>Vui lòng sử dụng mã OTP dưới đây để xác thực đổi email:</p>
+      <p style="font-size: 20px; font-weight: bold; letter-spacing: 4px;">${otp}</p>
+      <p><em>Mã OTP chỉ có hiệu lực trong 15 phút.</em></p>
+      <p>Nếu bạn không yêu cầu đổi email, vui lòng bỏ qua email này và liên hệ với quản trị viên.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Xác thực đổi email nhà hàng",
+    text,
+    html
+  });
+};
+
+export interface NewOrderNotificationParams {
+  to: string;
+  restaurantName: string;
+  ownerName?: string;
+  orderId: string;
+  tableNumber: string;
+  items: Array<{ name: string; price: number; quantity: number }>;
+  totalAmount: number;
+  note?: string;
+  orderTime: Date;
+}
+
+export const sendNewOrderNotification = async ({
+  to,
+  restaurantName,
+  ownerName,
+  orderId,
+  tableNumber,
+  items,
+  totalAmount,
+  note,
+  orderTime
+}: NewOrderNotificationParams) => {
+  if (!SMTP_HOST) {
+    throw new Error("SMTP_HOST chưa được cấu hình");
+  }
+
+  const from = MAIL_FROM || SMTP_USER || "no-reply@example.com";
+  const greeting = ownerName ? `Anh/chị ${ownerName}` : restaurantName;
+
+  const itemsList = items.map(item => 
+    `  - ${item.name} x${item.quantity}: ${(item.price * item.quantity).toLocaleString('vi-VN')}đ`
+  ).join('\n');
+
+  const text = [
+    `Xin chào ${greeting},`,
+    "",
+    "Bạn có một đơn hàng mới từ khách hàng!",
+    "",
+    `Mã đơn hàng: ${orderId}`,
+    `Số bàn: ${tableNumber}`,
+    `Thời gian: ${orderTime.toLocaleString('vi-VN')}`,
+    "",
+    "Danh sách món:",
+    itemsList,
+    "",
+    `Tổng tiền: ${totalAmount.toLocaleString('vi-VN')}đ`,
+    note ? `Ghi chú: ${note}` : "",
+    "",
+    "Vui lòng kiểm tra và xử lý đơn hàng trong hệ thống quản lý."
+  ].filter(Boolean).join('\n');
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+      <p>Xin chào <strong>${greeting}</strong>,</p>
+      <p style="font-size: 18px; color: #ea580c; font-weight: bold;">🔔 Bạn có một đơn hàng mới từ khách hàng!</p>
+      
+      <div style="background-color: #f9fafb; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p><strong>Mã đơn hàng:</strong> ${orderId}</p>
+        <p><strong>Số bàn:</strong> <span style="font-size: 18px; color: #ea580c; font-weight: bold;">${tableNumber}</span></p>
+        <p><strong>Thời gian:</strong> ${orderTime.toLocaleString('vi-VN')}</p>
+      </div>
+
+      <div style="margin: 16px 0;">
+        <p><strong>Danh sách món:</strong></p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+          <thead>
+            <tr style="background-color: #f3f4f6;">
+              <th style="padding: 8px; text-align: left; border: 1px solid #e5e7eb;">Món</th>
+              <th style="padding: 8px; text-align: center; border: 1px solid #e5e7eb;">Số lượng</th>
+              <th style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">Thành tiền</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td style="padding: 8px; border: 1px solid #e5e7eb;">${item.name}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #e5e7eb;">${item.quantity}</td>
+                <td style="padding: 8px; text-align: right; border: 1px solid #e5e7eb;">${(item.price * item.quantity).toLocaleString('vi-VN')}đ</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="background-color: #fef3c7; padding: 12px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 0; font-size: 18px; font-weight: bold; color: #92400e;">
+          Tổng tiền: ${totalAmount.toLocaleString('vi-VN')}đ
+        </p>
+      </div>
+
+      ${note ? `
+        <div style="background-color: #fee2e2; padding: 12px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0;"><strong>Ghi chú từ khách:</strong></p>
+          <p style="margin: 4px 0 0 0; color: #991b1b;">${note}</p>
+        </div>
+      ` : ''}
+
+      <p style="margin-top: 24px; padding: 12px; background-color: #dbeafe; border-radius: 8px;">
+        Vui lòng kiểm tra và xử lý đơn hàng trong hệ thống quản lý.
+      </p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: `🔔 Đơn hàng mới - Bàn ${tableNumber} - ${restaurantName}`,
+    text,
+    html
+  });
+};
+

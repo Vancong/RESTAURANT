@@ -65,6 +65,10 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     phone: restaurant.phone
   });
   const [isSavingRestaurant, setIsSavingRestaurant] = useState(false);
+  const [emailChangeOtp, setEmailChangeOtp] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [newEmailForChange, setNewEmailForChange] = useState('');
 
   // Cập nhật form khi restaurant prop thay đổi
   useEffect(() => {
@@ -76,6 +80,9 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
         address: restaurant.address,
         phone: restaurant.phone
       });
+      setEmailChangeOtp('');
+      setOtpSent(false);
+      setNewEmailForChange('');
     }
   }, [restaurant, isEditingRestaurant]);
 
@@ -374,6 +381,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   <div className="mb-4 md:mb-0">
                     <div className="flex items-center mb-2">
                         <span className="font-bold text-lg mr-3">Bàn {order.tableNumber}</span>
+                        {order.customerName && (
+                          <span className="text-sm text-gray-600 mr-3">- Khách: <span className="font-semibold text-brand-600">{order.customerName}</span></span>
+                        )}
                         {renderStatusBadge(order.status)}
                         <span className="text-gray-400 text-xs ml-3">{new Date(order.timestamp).toLocaleTimeString()}</span>
                         {order.status === OrderStatus.CONFIRMED && order.confirmedByName && (
@@ -730,8 +740,30 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     e.preventDefault();
                     try {
                       setIsSavingRestaurant(true);
-                      await onUpdateRestaurant(restaurantForm);
+                      // Kiểm tra nếu email thay đổi thì cần OTP
+                      const emailChanged = restaurantForm.email.toLowerCase() !== restaurant.email.toLowerCase();
+                      if (emailChanged && !emailChangeOtp) {
+                        alert('Vui lòng nhập mã OTP để xác thực đổi email');
+                        setIsSavingRestaurant(false);
+                        return;
+                      }
+                      if (emailChanged && emailChangeOtp.length !== 6) {
+                        alert('Mã OTP phải có 6 chữ số');
+                        setIsSavingRestaurant(false);
+                        return;
+                      }
+                      
+                      // Gọi API với OTP nếu email thay đổi
+                      const updateData = { ...restaurantForm };
+                      if (emailChanged) {
+                        (updateData as any).emailChangeOtp = emailChangeOtp;
+                      }
+                      
+                      await onUpdateRestaurant(updateData);
                       setIsEditingRestaurant(false);
+                      setEmailChangeOtp('');
+                      setOtpSent(false);
+                      setNewEmailForChange('');
                       alert('Đã cập nhật thông tin nhà hàng thành công!');
                     } catch (err) {
                       alert(err instanceof Error ? err.message : 'Không thể cập nhật thông tin nhà hàng');
@@ -768,13 +800,117 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Email
                     </label>
-                    <input
-                      type="email"
-                      required
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                      value={restaurantForm.email}
-                      onChange={(e) => setRestaurantForm({ ...restaurantForm, email: e.target.value })}
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="email"
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                        value={restaurantForm.email}
+                        onChange={(e) => {
+                          const newEmail = e.target.value;
+                          setRestaurantForm({ ...restaurantForm, email: newEmail });
+                          // Reset OTP state nếu email thay đổi
+                          if (newEmail.toLowerCase() !== restaurant.email.toLowerCase()) {
+                            setOtpSent(false);
+                            setEmailChangeOtp('');
+                            setNewEmailForChange(newEmail);
+                          } else {
+                            setOtpSent(false);
+                            setEmailChangeOtp('');
+                            setNewEmailForChange('');
+                          }
+                        }}
+                      />
+                      {restaurantForm.email.toLowerCase() !== restaurant.email.toLowerCase() && (
+                        <div className="space-y-2">
+                          {!otpSent ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={async () => {
+                                try {
+                                  setIsSendingOtp(true);
+                                  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                                  if (!token) {
+                                    throw new Error('Vui lòng đăng nhập lại');
+                                  }
+                                  const res = await fetch(`${API_BASE_URL}/api/restaurants/me/request-email-change`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      Authorization: `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({ newEmail: restaurantForm.email.trim() })
+                                  });
+                                  const body = await res.json().catch(() => null);
+                                  if (!res.ok) {
+                                    throw new Error(body?.message || 'Không thể gửi mã OTP');
+                                  }
+                                  setOtpSent(true);
+                                  setNewEmailForChange(restaurantForm.email.trim());
+                                  alert('Đã gửi mã OTP đến email hiện tại của nhà hàng. Vui lòng kiểm tra hộp thư.');
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Không thể gửi mã OTP');
+                                } finally {
+                                  setIsSendingOtp(false);
+                                }
+                              }}
+                              disabled={isSendingOtp}
+                            >
+                              {isSendingOtp ? 'Đang gửi...' : 'Gửi mã OTP xác thực'}
+                            </Button>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-xs text-gray-600">
+                                Mã OTP đã được gửi đến email hiện tại: <strong>{restaurant.email}</strong>
+                              </p>
+                              <input
+                                type="text"
+                                placeholder="Nhập mã OTP 6 chữ số"
+                                maxLength={6}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-center text-lg tracking-widest"
+                                value={emailChangeOtp}
+                                onChange={(e) => setEmailChangeOtp(e.target.value.replace(/\D/g, ''))}
+                              />
+                              <button
+                                type="button"
+                                className="text-xs text-brand-600 hover:text-brand-700"
+                                onClick={async () => {
+                                  try {
+                                    setIsSendingOtp(true);
+                                    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                                    if (!token) {
+                                      throw new Error('Vui lòng đăng nhập lại');
+                                    }
+                                    const res = await fetch(`${API_BASE_URL}/api/restaurants/me/request-email-change`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        Authorization: `Bearer ${token}`
+                                      },
+                                      body: JSON.stringify({ newEmail: restaurantForm.email.trim() })
+                                    });
+                                    const body = await res.json().catch(() => null);
+                                    if (!res.ok) {
+                                      throw new Error(body?.message || 'Không thể gửi mã OTP');
+                                    }
+                                    setEmailChangeOtp('');
+                                    alert('Đã gửi lại mã OTP. Vui lòng kiểm tra email.');
+                                  } catch (err) {
+                                    alert(err instanceof Error ? err.message : 'Không thể gửi lại mã OTP');
+                                  } finally {
+                                    setIsSendingOtp(false);
+                                  }
+                                }}
+                              >
+                                Gửi lại mã OTP
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
