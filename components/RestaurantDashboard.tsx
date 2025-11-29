@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStats, StatsPeriod } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
@@ -543,6 +543,64 @@ const formatDateShort = (timestamp: number): string => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  // Audio notification for new orders - "reng reng" sound
+  const playNotificationSound = useCallback(() => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) {
+        console.warn('Web Audio API không được hỗ trợ');
+        return;
+      }
+      
+      const audioContext = new AudioContextClass();
+      
+      // Resume nếu bị suspended (do browser autoplay policy)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {
+          console.warn('Không thể resume AudioContext');
+        });
+      }
+      
+      const now = audioContext.currentTime;
+      
+      // Tạo âm thanh "reng reng" với 2 lần lặp lại, mỗi lần có 3 nốt nhạc
+      const ringPattern = [
+        { start: 0, duration: 0.15, frequencies: [1000, 1200, 1500] },
+        { start: 0.2, duration: 0.15, frequencies: [1000, 1200, 1500] },
+        { start: 0.5, duration: 0.15, frequencies: [1000, 1200, 1500] },
+        { start: 0.7, duration: 0.15, frequencies: [1000, 1200, 1500] }
+      ];
+      
+      ringPattern.forEach((ring) => {
+        ring.frequencies.forEach((freq) => {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          // Cấu hình âm thanh
+          oscillator.frequency.value = freq;
+          oscillator.type = 'sine';
+          
+          const startTime = now + ring.start;
+          const endTime = startTime + ring.duration;
+          
+          // Fade in/out nhanh cho mỗi nốt
+          gainNode.gain.setValueAtTime(0, startTime);
+          gainNode.gain.linearRampToValueAtTime(0.15, startTime + 0.02);
+          gainNode.gain.linearRampToValueAtTime(0.15, endTime - 0.02);
+          gainNode.gain.linearRampToValueAtTime(0, endTime);
+          
+          oscillator.start(startTime);
+          oscillator.stop(endTime);
+        });
+      });
+    } catch (err) {
+      console.warn('Không thể phát âm thanh thông báo:', err);
+    }
+  }, []);
+
   // Track orders for notifications
   const previousOrdersRef = useRef<Order[]>([]);
   
@@ -559,6 +617,7 @@ const formatDateShort = (timestamp: number): string => {
             '🔔 Đơn hàng mới',
             `Bàn ${order.tableNumber} - ${order.totalAmount.toLocaleString('vi-VN')}đ${order.customerName ? ` - ${order.customerName}` : ''}`
           );
+          playNotificationSound();
           setNotifiedOrderIds(prev => new Set([...prev, order.id]));
         } else if (order.status === OrderStatus.CANCELLED) {
           addNotification(
