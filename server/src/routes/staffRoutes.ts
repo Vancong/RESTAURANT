@@ -126,18 +126,30 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
     }
   }
 
-  // Lấy thông tin nhân viên để lưu tên
+  // Lấy thông tin người cập nhật để lưu tên
+  let updatedByName = "";
   let confirmedByName = "";
   if (userId) {
     const user = await User.findById(userId).select("name username");
     if (user) {
-      confirmedByName = user.name || user.username || "";
+      const userName = user.name || user.username || "";
+      updatedByName = userName;
+      // Lưu confirmedByName riêng cho trạng thái CONFIRMED
+      if (status === OrderStatus.CONFIRMED) {
+        confirmedByName = userName;
+      }
     }
   }
 
   const updateData: any = { status: status as OrderStatus };
   
-  // Chỉ lưu thông tin nhân viên khi xác nhận đơn (CONFIRMED)
+  // Lưu thông tin người cập nhật cho mọi trạng thái
+  if (userId) {
+    updateData.updatedBy = new mongoose.Types.ObjectId(userId);
+    updateData.updatedByName = updatedByName;
+  }
+  
+  // Lưu thông tin nhân viên khi xác nhận đơn (CONFIRMED)
   if (status === OrderStatus.CONFIRMED && userId) {
     updateData.confirmedBy = new mongoose.Types.ObjectId(userId);
     updateData.confirmedByName = confirmedByName;

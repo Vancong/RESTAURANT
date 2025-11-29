@@ -635,7 +635,12 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
-          emailChangeOtp: data.emailChangeOtp
+
+
+          emailChangeOtp: data.emailChangeOtp,
+          bankAccount: data.bankAccount,
+          bankName: data.bankName
+
         })
       });
       const body = await res.json().catch(() => null);
