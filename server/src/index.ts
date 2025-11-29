@@ -14,7 +14,14 @@ import orderRoutes from "./routes/orderRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// CORS configuration - allow frontend URL
+const frontendUrl = process.env.FRONTEND_URL || process.env.APP_BASE_URL;
+app.use(cors({
+  origin: frontendUrl || '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {

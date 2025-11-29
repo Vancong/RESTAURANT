@@ -1,4 +1,4 @@
-import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
+import { Restaurant, MenuItem, Order, OrderStatus, RestaurantStatus } from '../types';
 
 export const initialRestaurants: Restaurant[] = [
   {
@@ -9,7 +9,7 @@ export const initialRestaurants: Restaurant[] = [
     email: 'admin88@example.com',
     address: '88 Lý Thường Kiệt, Hà Nội',
     phone: '0901 234 567',
-    status: 'ACTIVE',
+    status: RestaurantStatus.ACTIVE,
     active: true
   },
   {
@@ -20,7 +20,7 @@ export const initialRestaurants: Restaurant[] = [
     email: 'burger@example.com',
     address: '12 Nguyễn Huệ, TP.HCM',
     phone: '0908 765 432',
-    status: 'ACTIVE',
+    status: RestaurantStatus.ACTIVE,
     active: true
   }
 ];

@@ -172,7 +172,7 @@ router.get("/", async (req, res) => {
     }
 
     const restaurants = await Restaurant.find(filter).sort(sort);
-    res.json(restaurants);
+  res.json(restaurants);
   } catch (error) {
     res.status(500).json({ message: "Không thể lấy danh sách nhà hàng", error });
   }

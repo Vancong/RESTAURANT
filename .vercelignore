@@ -1,0 +1,7 @@
+server/
+server/**
+*.md
+DEPLOY.md
+.env
+.env.local
+
