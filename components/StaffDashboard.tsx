@@ -13,7 +13,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({
-  restaurantId,
+  restaurantId: _restaurantId,
   restaurantName,
   onLogout
 }) => {

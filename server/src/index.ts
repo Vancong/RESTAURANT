@@ -14,7 +14,39 @@ import orderRoutes from "./routes/orderRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,
+  process.env.VERCEL_URL,
+  process.env.NETLIFY_URL,
+].filter(Boolean) as string[];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.some(allowed => origin.includes(allowed))) {
+      return callback(null, true);
+    }
+    
+    // For production, allow common frontend hosting domains
+    if (process.env.NODE_ENV === 'production') {
+      if (origin.includes('vercel.app') || 
+          origin.includes('netlify.app') || 
+          origin.includes('github.io') ||
+          origin.includes('cloudflarepages.app')) {
+        return callback(null, true);
+      }
+    }
+    
+    callback(null, true); // Allow all for now, update after frontend deploy
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {

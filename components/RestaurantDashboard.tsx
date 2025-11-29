@@ -77,7 +77,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [emailChangeOtp, setEmailChangeOtp] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [newEmailForChange, setNewEmailForChange] = useState('');
+  const [_newEmailForChange, setNewEmailForChange] = useState('');
   const [bankAccountInput, setBankAccountInput] = useState(restaurant.bankAccount || '');
   const [bankNameInput, setBankNameInput] = useState(restaurant.bankName || '');
   const [isSavingBank, setIsSavingBank] = useState(false);
@@ -244,12 +244,12 @@ const formatDateShort = (timestamp: number): string => {
 };
 
   // Stats Logic (legacy - for backward compatibility)
-  const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
-  const revenue = completedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const chartData = completedOrders.map(o => ({
-      name: `Bàn ${o.tableNumber}`,
-      amount: o.totalAmount
-  })).slice(-10); // Last 10 orders
+  // const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
+  // const revenue = completedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+  // const chartData = completedOrders.map(o => ({
+  //     name: `Bàn ${o.tableNumber}`,
+  //     amount: o.totalAmount
+  // })).slice(-10); // Last 10 orders
 
   // Fetch stats when period changes
   useEffect(() => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power, KeyRound, Edit, X, BarChart3, List, Search, Filter, TrendingUp } from 'lucide-react';
+import { Plus, Store, Power, KeyRound, Edit, X, BarChart3, List, Search, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface SuperAdminDashboardProps {
