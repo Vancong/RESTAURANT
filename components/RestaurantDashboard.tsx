@@ -731,6 +731,10 @@ const parsePrice = (priceString: string): number => {
             .filter(order => order.status === OrderStatus.COMPLETED)
             .sort((a, b) => b.timestamp - a.timestamp); // Mới nhất trước
 
+          const cancelledOrders = orders
+            .filter(order => order.status === OrderStatus.CANCELLED)
+            .sort((a, b) => b.timestamp - a.timestamp); // Mới nhất trước
+
           const renderOrderCard = (order: Order) => {
             const isPending = order.status === OrderStatus.PENDING;
             const isUrgent = isPending;
@@ -773,7 +777,7 @@ const parsePrice = (priceString: string): number => {
                       <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 mt-2">
                         <div className="flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" />
-                          <span>{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                          <span>{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
                         </div>
                         {order.status === OrderStatus.COMPLETED && order.paymentMethod && (
                           <div className="flex items-center gap-1">
@@ -1023,7 +1027,7 @@ const parsePrice = (priceString: string): number => {
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1.5 rounded-lg">
                                 <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
                               {order.updatedByName && (
                                 <div className="flex items-center gap-1.5 bg-green-50 px-2.5 py-1.5 rounded-lg">
@@ -1056,6 +1060,119 @@ const parsePrice = (priceString: string): number => {
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-gray-600 font-semibold">Tổng tiền</span>
                               <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                                {formatPrice(order.totalAmount)}₫
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Đơn hàng đã hủy */}
+              {cancelledOrders.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-1 h-8 bg-gradient-to-b from-red-400 to-red-500 rounded-full"></div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Đơn hàng đã hủy</h2>
+                        <p className="text-sm text-gray-500 mt-0.5">Lịch sử đơn hàng đã bị hủy</p>
+                      </div>
+                    </div>
+                    <span className="bg-gradient-to-r from-red-100 to-red-50 text-red-700 border border-red-200 px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 shadow-sm">
+                      <XCircle className="w-4 h-4" />
+                      {cancelledOrders.length} đơn
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {cancelledOrders.map(order => (
+                      <div 
+                        key={order.id} 
+                        className="bg-white rounded-xl shadow-md border-2 border-red-200 hover:shadow-lg hover:border-red-300 transition-all duration-200 overflow-hidden group opacity-75"
+                      >
+                        {/* Header với gradient màu đỏ */}
+                        <div className="bg-gradient-to-r from-red-50 via-red-50 to-red-100 px-4 py-3 border-b-2 border-red-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 via-red-500 to-red-600 flex items-center justify-center font-bold text-white text-base shadow-lg">
+                                {order.tableNumber}
+                              </div>
+                              <div>
+                                <h3 className="font-bold text-base text-gray-900">Bàn {order.tableNumber}</h3>
+                                {order.customerName && (
+                                  <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                                    <User className="w-3.5 h-3.5 text-red-600" />
+                                    <span className="font-medium">{order.customerName}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {renderStatusBadge(order.status)}
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4">
+                          {/* Items */}
+                          <div className="bg-gradient-to-br from-gray-50 to-red-50 rounded-lg p-3 mb-3 border border-red-100">
+                            <div className="space-y-2.5">
+                              {order.items.slice(0, 2).map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-sm bg-white rounded-lg px-2.5 py-2 shadow-sm">
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-gradient-to-r from-red-500 to-red-600 text-white px-2.5 py-1 rounded-md font-bold text-xs shadow-md">
+                                      {item.quantity}x
+                                    </span>
+                                    <span className="text-gray-800 font-semibold line-through">{item.name}</span>
+                                  </div>
+                                  <span className="text-gray-600 font-bold text-xs line-through">
+                                    {formatPrice(item.price * item.quantity)}₫
+                                  </span>
+                                </div>
+                              ))}
+                              {order.items.length > 2 && (
+                                <div className="pt-2 border-t border-red-200">
+                                  <p className="text-xs text-red-600 font-semibold text-center">
+                                    +{order.items.length - 2} món khác
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Note */}
+                          {order.note && (
+                            <div className="bg-red-50 border-l-3 border-red-400 rounded-lg p-2.5 mb-3">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs text-red-800 font-medium leading-relaxed">{order.note}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Footer info */}
+                          <div className="space-y-2 mb-3 pb-3 border-b border-red-200">
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-lg">
+                                <Clock className="w-3.5 h-3.5 text-red-600" />
+                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                              {order.updatedByName && (
+                                <div className="flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-lg">
+                                  <User className="w-3.5 h-3.5 text-red-600" />
+                                  <span className="font-bold text-red-700">{order.updatedByName}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Total */}
+                          <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-3 border border-red-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600 font-semibold">Tổng tiền</span>
+                              <p className="text-2xl font-bold bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent line-through">
                                 {formatPrice(order.totalAmount)}₫
                               </p>
                             </div>
