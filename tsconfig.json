@@ -16,6 +16,13 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "server", "server/**/*"]
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "exclude": [
+    "node_modules",
+    "server",
+    "server/**/*",
+    "**/server/**",
+    "dist",
+    "build"
+  ]
 }
