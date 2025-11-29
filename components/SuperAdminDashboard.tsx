@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power, KeyRound } from 'lucide-react';
+import { Plus, Store, Power, KeyRound, Edit } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
   onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
   onResetPassword: (id: string, password: string) => void;
+  onUpdateRestaurant: (id: string, payload: {
+    name: string;
+    username: string;
+    ownerName: string;
+    email: string;
+    address: string;
+    phone: string;
+    status: RestaurantStatus;
+  }) => void;
   onLogout: () => void;
 }
 
@@ -16,9 +25,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   onAddRestaurant,
   onToggleActive,
   onResetPassword,
+  onUpdateRestaurant,
   onLogout
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const initialForm: NewRestaurantPayload = {
     name: '',
@@ -33,6 +44,17 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [newRest, setNewRest] = useState<NewRestaurantPayload>(initialForm);
   const [resetPassword, setResetPassword] = useState('');
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const emptyEditForm = {
+    name: '',
+    username: '',
+    ownerName: '',
+    email: '',
+    address: '',
+    phone: '',
+    status: 'ACTIVE' as RestaurantStatus
+  };
+  const [editForm, setEditForm] = useState<typeof emptyEditForm>(emptyEditForm);
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +76,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     setIsResetModalOpen(false);
     setResetPassword('');
     setResetTarget(null);
+  };
+
+  const openEditModal = (restaurant: Restaurant) => {
+    setEditTargetId(restaurant.id);
+    setEditForm({
+      name: restaurant.name,
+      username: restaurant.username,
+      ownerName: restaurant.ownerName,
+      email: restaurant.email,
+      address: restaurant.address,
+      phone: restaurant.phone,
+      status: restaurant.status
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTargetId) return;
+    onUpdateRestaurant(editTargetId, editForm);
+    setIsEditModalOpen(false);
+    setEditTargetId(null);
+    setEditForm(emptyEditForm);
   };
 
   return (
@@ -104,6 +149,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                       {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
                     </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openEditModal(rest)}
+                      title="Chỉnh sửa thông tin nhà hàng"
+                    >
+                      <Edit className="w-4 h-4 text-blue-500" />
+                    </Button>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -213,6 +266,96 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               <div className="flex justify-end space-x-3 mt-6">
                 <Button variant="secondary" onClick={() => setIsModalOpen(false)} type="button">Hủy</Button>
                 <Button type="submit">Tạo mới</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-4">Chỉnh sửa thông tin nhà hàng</h3>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tên nhà hàng</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tên người chủ</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.ownerName}
+                  onChange={e => setEditForm({ ...editForm, ownerName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email nhà hàng</label>
+                <input
+                  required
+                  type="email"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.email}
+                  onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tên đăng nhập (Admin nhà hàng)</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.username}
+                  onChange={e => setEditForm({ ...editForm, username: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Địa chỉ nhà hàng</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.address}
+                  onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
+                <input
+                  required
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.phone}
+                  onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Trạng thái nhà hàng</label>
+                <select
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={editForm.status}
+                  onChange={e => setEditForm({ ...editForm, status: e.target.value as RestaurantStatus })}
+                >
+                  <option value="ACTIVE">Đang hoạt động</option>
+                  <option value="INACTIVE">Tạm khóa</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditTargetId(null);
+                  }}
+                  type="button"
+                >
+                  Hủy
+                </Button>
+                <Button type="submit">Lưu thay đổi</Button>
               </div>
             </form>
           </div>

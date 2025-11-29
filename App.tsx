@@ -197,6 +197,59 @@ const App: React.FC = () => {
     }
   };
 
+  const updateRestaurantDetails = async (
+    id: string,
+    payload: Partial<Omit<Restaurant, 'id' | 'active'>> & { status?: RestaurantStatus; active?: boolean }
+  ) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể cập nhật thông tin nhà hàng');
+      }
+      const updated: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+      } = await res.json();
+
+      setRestaurants(prev =>
+        prev.map(r =>
+          r.id === id
+            ? {
+                ...r,
+                name: updated.name,
+                username: updated.username,
+                ownerName: updated.ownerName,
+                email: updated.email,
+                address: updated.address,
+                phone: updated.phone,
+                status: updated.status,
+                active: updated.active
+              }
+            : r
+        )
+      );
+      alert('Đã cập nhật thông tin nhà hàng.');
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : 'Không thể cập nhật nhà hàng');
+    }
+  };
+
   const toggleRestaurantStatus = async (id: string) => {
     try {
       const current = restaurants.find(r => r.id === id);
@@ -327,6 +380,7 @@ const App: React.FC = () => {
         onAddRestaurant={addRestaurant}
         onToggleActive={toggleRestaurantStatus}
         onResetPassword={resetRestaurantPassword}
+        onUpdateRestaurant={updateRestaurantDetails}
         onLogout={handleLogout}
       />
     );
