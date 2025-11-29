@@ -16,14 +16,27 @@ router.get("/", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as string[]
   const staffList = await User.find({
     restaurantId: new mongoose.Types.ObjectId(restaurantId),
     role: UserRole.STAFF
-  }).select("_id username role isActive");
-  res.json(staffList.map(s => ({ id: s._id, username: s.username, role: s.role, isActive: s.isActive ?? true })));
+  })
+    .select("_id username role isActive name updatedBy")
+    .populate("updatedBy", "username");
+  res.json(staffList.map(s => ({
+    id: s._id,
+    username: s.username,
+    role: s.role,
+    isActive: s.isActive ?? true,
+    name: s.name || "",
+    updatedBy: s.updatedBy ? {
+      id: (s.updatedBy as any)._id,
+      username: (s.updatedBy as any).username
+    } : null
+  })));
 });
 
 // Admin nhà hàng tạo tài khoản nhân viên
 router.post("/", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as string[]), async (req: AuthRequest, res) => {
-  const { username, password } = req.body as { username?: string; password?: string };
+  const { username, password, name } = req.body as { username?: string; password?: string; name?: string };
   const restaurantId = req.auth?.restaurantId;
+  const adminId = req.auth?.sub;
 
   if (!username || !password) {
     return res.status(400).json({ message: "Thiếu username hoặc password" });
@@ -31,6 +44,10 @@ router.post("/", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as string[
 
   if (!restaurantId) {
     return res.status(403).json({ message: "Không xác định được nhà hàng" });
+  }
+
+  if (!adminId) {
+    return res.status(403).json({ message: "Không xác định được admin" });
   }
 
   const existingUser = await User.findOne({ username });
@@ -43,14 +60,23 @@ router.post("/", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as string[
     username,
     passwordHash,
     role: UserRole.STAFF,
-    restaurantId: new mongoose.Types.ObjectId(restaurantId)
+    restaurantId: new mongoose.Types.ObjectId(restaurantId),
+    name: name?.trim() || "",
+    updatedBy: new mongoose.Types.ObjectId(adminId)
   });
+
+  const updatedByUser = await User.findById(adminId).select("username");
 
   res.status(201).json({
     id: staff._id,
     username: staff.username,
     role: staff.role,
-    restaurantId: staff.restaurantId
+    restaurantId: staff.restaurantId,
+    name: staff.name || "",
+    updatedBy: updatedByUser ? {
+      id: updatedByUser._id,
+      username: updatedByUser.username
+    } : null
   });
 });
 
@@ -133,22 +159,27 @@ router.patch("/:id/toggle-active", requireAuth, requireRole([UserRole.RESTAURANT
   }
 });
 
-// Cập nhật username/password nhân viên
+// Cập nhật username/password/name nhân viên
 router.patch("/:id", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as string[]), async (req: AuthRequest, res) => {
   const restaurantId = req.auth?.restaurantId;
+  const adminId = req.auth?.sub;
   const { id } = req.params;
-  const { username, password } = req.body as { username?: string; password?: string };
+  const { username, password, name } = req.body as { username?: string; password?: string; name?: string };
 
   if (!restaurantId) {
     return res.status(403).json({ message: "Không xác định được nhà hàng" });
+  }
+
+  if (!adminId) {
+    return res.status(403).json({ message: "Không xác định được admin" });
   }
 
   if (!mongoose.isValidObjectId(id)) {
     return res.status(400).json({ message: "ID nhân viên không hợp lệ" });
   }
 
-  if (!username && !password) {
-    return res.status(400).json({ message: "Cần cung cấp username hoặc password để cập nhật" });
+  if (!username && !password && !name) {
+    return res.status(400).json({ message: "Cần cung cấp username, password hoặc name để cập nhật" });
   }
 
   try {
@@ -176,13 +207,27 @@ router.patch("/:id", requireAuth, requireRole([UserRole.RESTAURANT_ADMIN] as str
       staff.passwordHash = passwordHash;
     }
 
+    if (name !== undefined) {
+      staff.name = name.trim() || "";
+    }
+
+    // Cập nhật updatedBy
+    staff.updatedBy = new mongoose.Types.ObjectId(adminId);
+
     await staff.save();
+
+    const updatedByUser = await User.findById(adminId).select("username");
 
     res.json({
       id: staff._id,
       username: staff.username,
       role: staff.role,
-      isActive: staff.isActive ?? true
+      isActive: staff.isActive ?? true,
+      name: staff.name || "",
+      updatedBy: updatedByUser ? {
+        id: updatedByUser._id,
+        username: updatedByUser.username
+      } : null
     });
   } catch (error) {
     res.status(500).json({ message: "Lỗi server khi cập nhật nhân viên", error });
