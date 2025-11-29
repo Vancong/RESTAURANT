@@ -393,18 +393,23 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
     };
 
     return (
-      <form onSubmit={handleCreate} className="space-y-2 mt-3">
-        <label className="block text-xs font-medium text-gray-600">Thêm danh mục mới</label>
+      <form onSubmit={handleCreate} className="space-y-2 pt-4 border-t border-gray-200">
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Thêm danh mục mới</label>
         <div className="flex space-x-2">
           <input
             type="text"
-            className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white"
             placeholder="VD: Món Chính, Đồ Uống..."
             value={name}
             onChange={e => setName(e.target.value)}
           />
-          <Button type="submit" size="sm" disabled={loading}>
-            <Plus className="w-3 h-3 mr-1" />
+          <Button 
+            type="submit" 
+            size="sm" 
+            disabled={loading}
+            className="px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
+          >
+            <Plus className="w-4 h-4 mr-1" />
             {loading ? 'Đang thêm' : 'Thêm'}
           </Button>
         </div>
@@ -413,66 +418,94 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/20 flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="bg-white w-full md:w-64 border-r border-gray-200 flex-shrink-0">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-brand-600 truncate">{restaurant.name}</h2>
-          <p className="text-xs text-gray-500">Quản lý nhà hàng</p>
+      <aside className="bg-gradient-to-b from-white to-orange-50/50 w-full md:w-72 border-r border-orange-100 flex-shrink-0 shadow-lg">
+        <div className="p-6 border-b border-orange-100 bg-gradient-to-r from-brand-600 to-brand-700">
+          <h2 className="text-2xl font-bold text-white truncate drop-shadow-md">{restaurant.name}</h2>
+          <p className="text-xs text-orange-100 mt-1 font-medium">Quản lý nhà hàng</p>
         </div>
-        <nav className="p-4 space-y-1">
+        <nav className="p-4 space-y-2">
           <button 
             onClick={() => setActiveTab('orders')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'orders' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'orders' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-[1.02]'
+            }`}
           >
-            <Clock className="w-5 h-5 mr-3" /> Đơn hàng
+            <Clock className={`w-5 h-5 mr-3 ${activeTab === 'orders' ? 'text-white' : 'text-brand-600'}`} /> Đơn hàng
           </button>
           <button 
             onClick={() => setActiveTab('menu')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'menu' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'menu' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <UtensilsCrossed className="w-5 h-5 mr-3" /> Thực đơn
+            <UtensilsCrossed className={`w-5 h-5 mr-3 ${activeTab === 'menu' ? 'text-white' : 'text-brand-600'}`} /> Thực đơn
           </button>
           <button 
             onClick={() => setActiveTab('stats')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'stats' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'stats' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <LayoutDashboard className="w-5 h-5 mr-3" /> Thống kê
+            <LayoutDashboard className={`w-5 h-5 mr-3 ${activeTab === 'stats' ? 'text-white' : 'text-brand-600'}`} /> Thống kê
           </button>
           <button 
             onClick={() => setActiveTab('qr')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'qr' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'qr' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <QrCode className="w-5 h-5 mr-3" /> Mã QR
+            <QrCode className={`w-5 h-5 mr-3 ${activeTab === 'qr' ? 'text-white' : 'text-brand-600'}`} /> Mã QR
           </button>
           <button 
             onClick={() => setActiveTab('staff')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'staff' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'staff' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <Users className="w-5 h-5 mr-3" /> Nhân viên
+            <Users className={`w-5 h-5 mr-3 ${activeTab === 'staff' ? 'text-white' : 'text-brand-600'}`} /> Nhân viên
           </button>
           <button 
             onClick={() => setActiveTab('bank')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'bank' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'bank' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <CreditCard className="w-5 h-5 mr-3" /> Ngân hàng
+            <CreditCard className={`w-5 h-5 mr-3 ${activeTab === 'bank' ? 'text-white' : 'text-brand-600'}`} /> Ngân hàng
           </button>
           <button 
             onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'settings' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'settings' 
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
+                : 'text-gray-700 hover:bg-orange-50 hover:shadow-md hover:scale-102'
+            }`}
           >
-            <Settings className="w-5 h-5 mr-3" /> Cài đặt
+            <Settings className={`w-5 h-5 mr-3 ${activeTab === 'settings' ? 'text-white' : 'text-brand-600'}`} /> Cài đặt
           </button>
-          <div className="pt-4 mt-4 border-t border-gray-100 space-y-2">
+          <div className="pt-4 mt-4 border-t border-orange-200 space-y-2">
             <button
               onClick={() => setIsChangePwOpen(true)}
-              className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+              className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:shadow-md rounded-xl transition-all duration-200"
             >
-              <Lock className="w-5 h-5 mr-3" /> Đổi mật khẩu
+              <Lock className="w-5 h-5 mr-3 text-gray-500" /> Đổi mật khẩu
             </button>
             <button
               onClick={onLogout}
-              className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+              className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:shadow-md rounded-xl transition-all duration-200"
             >
               <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
             </button>
@@ -847,24 +880,44 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
         {/* MENU TAB */}
         {activeTab === 'menu' && (
           <div className="space-y-8">
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h3 className="text-lg font-bold mb-4 flex items-center">
-                    <ChefHat className="w-5 h-5 mr-2 text-brand-600"/> Thêm món mới
-                </h3>
-                <form onSubmit={handleSubmitMenu} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Tên món</label>
-                        <input required className="mt-1 w-full border border-gray-300 rounded-md p-2" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+             {/* Form thêm món mới - Redesigned */}
+             <div className="bg-gradient-to-br from-white via-white to-orange-50/30 p-8 rounded-2xl shadow-xl border border-orange-100 backdrop-blur-sm">
+                <div className="flex items-center mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mr-4 shadow-lg shadow-brand-200">
+                    <ChefHat className="w-6 h-6 text-white"/>
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Thêm món mới</h3>
+                    <p className="text-sm text-gray-500">Điền thông tin để thêm món vào thực đơn</p>
+                  </div>
+                </div>
+                <form onSubmit={handleSubmitMenu} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700">Tên món <span className="text-red-500">*</span></label>
+                        <input 
+                          required 
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white" 
+                          placeholder="VD: Phở bò tái chín"
+                          value={newItem.name || ''} 
+                          onChange={e => setNewItem({...newItem, name: e.target.value})} 
+                        />
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Giá (VND)</label>
-                        <input required type="number" className="mt-1 w-full border border-gray-300 rounded-md p-2" value={newItem.price || ''} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700">Giá (VND) <span className="text-red-500">*</span></label>
+                        <input 
+                          required 
+                          type="number" 
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white" 
+                          placeholder="VD: 45000"
+                          value={newItem.price || ''} 
+                          onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} 
+                        />
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Danh mục</label>
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700">Danh mục <span className="text-red-500">*</span></label>
                         <select
                           required
-                          className="mt-1 w-full border border-gray-300 rounded-md p-2 bg-white"
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200"
                           value={newItem.category || ''}
                           onChange={e => setNewItem({ ...newItem, category: e.target.value })}
                         >
@@ -876,153 +929,241 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           ))}
                         </select>
                         {categories.length === 0 && (
-                          <p className="mt-1 text-xs text-red-500">
-                            Chưa có danh mục nào. Vui lòng thêm danh mục ở cột bên cạnh.
+                          <p className="text-xs text-orange-600 font-medium bg-orange-50 px-3 py-2 rounded-lg border border-orange-200">
+                            ⚠️ Chưa có danh mục nào. Vui lòng thêm danh mục ở cột bên phải.
                           </p>
                         )}
                     </div>
-                    <div className="md:col-span-2">
-                         <div className="flex justify-between items-center mb-1">
-                            <label className="block text-sm font-medium text-gray-700">Mô tả</label>
-                            <button type="button" onClick={handleGenerateDescription} disabled={isAiLoading} className="text-xs text-brand-600 hover:text-brand-800 flex items-center">
-                                <Sparkles className="w-3 h-3 mr-1" /> {isAiLoading ? 'Đang viết...' : 'Dùng AI viết mô tả'}
+                    <div className="md:col-span-2 space-y-2">
+                         <div className="flex justify-between items-center">
+                            <label className="block text-sm font-semibold text-gray-700">Mô tả</label>
+                            <button 
+                              type="button" 
+                              onClick={handleGenerateDescription} 
+                              disabled={isAiLoading} 
+                              className="text-xs font-semibold text-brand-600 hover:text-brand-800 flex items-center px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-all duration-200"
+                            >
+                                <Sparkles className={`w-3 h-3 mr-1 ${isAiLoading ? 'animate-pulse' : ''}`} /> 
+                                {isAiLoading ? 'Đang viết...' : 'Dùng AI viết mô tả'}
                             </button>
                          </div>
-                        <textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={2} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh món ăn</label>
-                      <div className="flex items-center space-x-4">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="text-sm"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-                              alert('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET).');
-                              return;
-                            }
-                            try {
-                              setIsUploadingImage(true);
-                              const formData = new FormData();
-                              formData.append('file', file);
-                              formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-                              const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-                                method: 'POST',
-                                body: formData
-                              });
-                              const data = await res.json();
-                              if (!res.ok) {
-                                throw new Error(data?.error?.message || 'Upload ảnh thất bại');
-                              }
-                              setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
-                            } catch (err) {
-                              alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
-                            } finally {
-                              setIsUploadingImage(false);
-                            }
-                          }}
+                        <textarea 
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition-all duration-200 bg-white resize-none" 
+                          rows={3} 
+                          placeholder="Mô tả chi tiết về món ăn..."
+                          value={newItem.description || ''} 
+                          onChange={e => setNewItem({...newItem, description: e.target.value})} 
                         />
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Ảnh món ăn</label>
+                      <div className="flex items-center space-x-4">
+                        <label className="flex items-center justify-center px-6 py-3 bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold rounded-xl cursor-pointer hover:from-brand-600 hover:to-brand-700 transition-all duration-200 shadow-lg shadow-brand-200 hover:shadow-xl">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+                                alert('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET).');
+                                return;
+                              }
+                              try {
+                                setIsUploadingImage(true);
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                                  method: 'POST',
+                                  body: formData
+                                });
+                                const data = await res.json();
+                                if (!res.ok) {
+                                  throw new Error(data?.error?.message || 'Upload ảnh thất bại');
+                                }
+                                setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
+                              } catch (err) {
+                                alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
+                              } finally {
+                                setIsUploadingImage(false);
+                              }
+                            }}
+                          />
+                          📸 Chọn ảnh
+                        </label>
                         {isUploadingImage && (
-                          <span className="text-xs text-gray-500">Đang upload ảnh...</span>
+                          <span className="text-sm text-gray-600 font-medium flex items-center">
+                            <span className="animate-spin mr-2">⏳</span> Đang upload ảnh...
+                          </span>
                         )}
                       </div>
                       {newItem.imageUrl && (
-                        <div className="mt-2">
-                          <p className="text-xs text-gray-500 mb-1">Preview:</p>
-                          <img
-                            src={newItem.imageUrl}
-                            alt="Preview món"
-                            className="w-32 h-24 object-cover rounded-md border"
-                          />
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-gray-600 mb-2">Preview:</p>
+                          <div className="relative inline-block">
+                            <img
+                              src={newItem.imageUrl}
+                              alt="Preview món"
+                              className="w-40 h-32 object-cover rounded-xl border-2 border-brand-200 shadow-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setNewItem(prev => ({ ...prev, imageUrl: undefined }))}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
                     <div className="md:col-span-2">
-                        <Button type="submit" className="w-full" disabled={isSavingMenuItem}>
-                          {isSavingMenuItem ? 'Đang lưu...' : 'Thêm vào thực đơn'}
+                        <Button 
+                          type="submit" 
+                          className="w-full py-4 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-200" 
+                          disabled={isSavingMenuItem}
+                        >
+                          {isSavingMenuItem ? (
+                            <span className="flex items-center justify-center">
+                              <span className="animate-spin mr-2">⏳</span> Đang lưu...
+                            </span>
+                          ) : (
+                            <span className="flex items-center justify-center">
+                              <Plus className="w-5 h-5 mr-2" /> Thêm vào thực đơn
+                            </span>
+                          )}
                         </Button>
                     </div>
                 </form>
              </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
-               {/* Danh sách món */}
-               <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {menu.map(item => (
-                    <div key={item.id} className={`bg-white border rounded-lg p-4 flex flex-col relative group ${!item.available ? 'opacity-60 border-red-200 bg-red-50' : ''}`}>
+             {/* Layout với danh sách món và danh mục */}
+             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+               {/* Danh sách món - Redesigned */}
+               <div className="lg:col-span-3">
+                 <div className="mb-4">
+                   <h3 className="text-xl font-bold text-gray-900">Danh sách món ({menu.length})</h3>
+                   <p className="text-sm text-gray-500">Quản lý các món trong thực đơn</p>
+                 </div>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {menu.length === 0 ? (
+                    <div className="col-span-full text-center py-12 bg-white rounded-2xl border-2 border-dashed border-gray-300">
+                      <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 font-medium">Chưa có món nào trong thực đơn</p>
+                      <p className="text-sm text-gray-400 mt-1">Thêm món mới ở phía trên</p>
+                    </div>
+                  ) : (
+                    menu.map(item => (
+                      <div 
+                        key={item.id} 
+                        className={`bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 group ${
+                          !item.available 
+                            ? 'opacity-70 border-red-200 bg-gradient-to-br from-red-50 to-white' 
+                            : 'border-transparent hover:border-brand-200'
+                        }`}
+                      >
+                        {/* Badge hết món */}
                         {!item.available && (
-                          <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-10">
-                            Hết món
+                          <div className="absolute top-3 left-3 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-bold px-3 py-1.5 rounded-full z-10 shadow-lg">
+                            ⛔ Hết món
                           </div>
                         )}
-                        <img src={item.imageUrl} alt={item.name} className="w-full h-32 object-cover rounded-md mb-3 bg-gray-100" />
-                        <h4 className="font-bold text-gray-900 line-clamp-1">{item.name}</h4>
-                        <p className="text-sm text-gray-500 mb-2">{item.price.toLocaleString('vi-VN')}đ</p>
-                        <p className="text-xs text-gray-400 line-clamp-2 mb-3 flex-1">{item.description}</p>
-                        <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button 
-                            variant="secondary" 
-                            size="sm"
-                            onClick={() => {
-                              const newAvailable = !item.available;
-                              onUpdateMenuItem(item.id, { available: newAvailable });
-                            }}
-                            title={item.available ? "Ẩn món (hết hàng)" : "Hiện món (còn hàng)"}
-                          >
-                            {item.available ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </Button>
-                          <Button 
-                            variant="secondary" 
-                            size="sm"
-                            onClick={() => setEditingItem(item)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="danger" 
-                            size="sm" 
-                            onClick={() => handleDeleteMenu(item.id)} 
-                            disabled={deletingMenuId === item.id}
-                          >
-                            <Trash className="w-4 h-4" />
-                          </Button>
+                        
+                        {/* Ảnh món */}
+                        <div className="relative h-48 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
+                          <img 
+                            src={item.imageUrl} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                          />
+                          {/* Action buttons overlay */}
+                          <div className="absolute top-3 right-3 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            <button
+                              onClick={() => {
+                                const newAvailable = !item.available;
+                                onUpdateMenuItem(item.id, { available: newAvailable });
+                              }}
+                              className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200"
+                              title={item.available ? "Ẩn món (hết hàng)" : "Hiện món (còn hàng)"}
+                            >
+                              {item.available ? <EyeOff className="w-4 h-4 text-gray-700" /> : <Eye className="w-4 h-4 text-green-600" />}
+                            </button>
+                            <button
+                              onClick={() => setEditingItem(item)}
+                              className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200"
+                              title="Chỉnh sửa"
+                            >
+                              <Edit className="w-4 h-4 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMenu(item.id)} 
+                              disabled={deletingMenuId === item.id}
+                              className="p-2 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white shadow-lg transition-all duration-200 disabled:opacity-50"
+                              title="Xóa món"
+                            >
+                              <Trash className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="mt-auto flex items-center justify-between">
-                           <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{item.category}</span>
-                           {item.available ? (
-                             <span className="inline-flex items-center text-xs text-green-600 font-medium">
-                               <CheckCircle className="w-3 h-3 mr-1" />
-                               Còn hàng
-                             </span>
-                           ) : (
-                             <span className="inline-flex items-center text-xs text-red-600 font-medium">
-                               <XCircle className="w-3 h-3 mr-1" />
-                               Hết hàng
-                             </span>
-                           )}
+                        
+                        {/* Nội dung */}
+                        <div className="p-5">
+                          <h4 className="font-bold text-lg text-gray-900 line-clamp-1 mb-2">{item.name}</h4>
+                          <p className="text-xl font-bold text-brand-600 mb-3">{item.price.toLocaleString('vi-VN')}₫</p>
+                          <p className="text-sm text-gray-500 line-clamp-2 mb-4 min-h-[2.5rem]">{item.description || 'Chưa có mô tả'}</p>
+                          
+                          {/* Footer với danh mục và trạng thái */}
+                          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                            <span className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-brand-50 to-orange-50 text-brand-700 text-xs font-semibold rounded-full border border-brand-200">
+                              {item.category}
+                            </span>
+                            {item.available ? (
+                              <span className="inline-flex items-center text-xs text-green-600 font-semibold bg-green-50 px-3 py-1 rounded-full">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Còn hàng
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center text-xs text-red-600 font-semibold bg-red-50 px-3 py-1 rounded-full">
+                                <XCircle className="w-3 h-3 mr-1" />
+                                Hết hàng
+                              </span>
+                            )}
+                          </div>
                         </div>
-                    </div>
-                ))}
+                      </div>
+                    ))
+                  )}
+                </div>
                </div>
 
-               {/* Cột danh mục */}
-               <div className="bg-white border rounded-lg p-4 space-y-3">
-                 <h4 className="font-bold text-gray-900 mb-2">Danh mục</h4>
-                 <ul className="space-y-1 max-h-48 overflow-y-auto text-sm">
-                   {categories.map(cat => (
-                     <li key={cat.id} className="flex items-center justify-between">
-                       <span>{cat.name}</span>
-                     </li>
-                   ))}
-                   {categories.length === 0 && (
-                     <li className="text-xs text-gray-500">Chưa có danh mục.</li>
-                   )}
-                 </ul>
-                 <CategoryCreator onCreated={fetchCategories} />
+               {/* Cột danh mục - Redesigned */}
+               <div className="lg:col-span-1">
+                 <div className="bg-gradient-to-br from-white via-white to-orange-50/30 rounded-2xl shadow-xl border border-orange-100 p-6 sticky top-4">
+                   <div className="flex items-center mb-4">
+                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center mr-3 shadow-md">
+                       <Receipt className="w-5 h-5 text-white"/>
+                     </div>
+                     <h4 className="text-lg font-bold text-gray-900">Danh mục</h4>
+                   </div>
+                   <ul className="space-y-2 max-h-64 overflow-y-auto pr-2 mb-4">
+                     {categories.length === 0 ? (
+                       <li className="text-sm text-gray-500 text-center py-4">Chưa có danh mục nào.</li>
+                     ) : (
+                       categories.map(cat => (
+                         <li 
+                           key={cat.id} 
+                           className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all duration-200"
+                         >
+                           <span className="text-sm font-medium text-gray-700">{cat.name}</span>
+                         </li>
+                       ))
+                     )}
+                   </ul>
+                   <CategoryCreator onCreated={fetchCategories} />
+                 </div>
                </div>
              </div>
           </div>
