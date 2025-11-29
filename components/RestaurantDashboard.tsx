@@ -44,6 +44,10 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [tables, setTables] = useState<{ id: string; code: string }[]>([]);
+  const [editingTable, setEditingTable] = useState<{ id: string; code: string } | null>(null);
+  const [editingTableCode, setEditingTableCode] = useState('');
+  const [isSavingTable, setIsSavingTable] = useState(false);
+  const [deletingTableId, setDeletingTableId] = useState<string | null>(null);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState<string>('');
@@ -411,6 +415,7 @@ const formatDateShort = (timestamp: number): string => {
         throw new Error(body?.message || 'Không thể lưu thông tin bàn');
       }
       alert('Đã lưu số bàn vào hệ thống');
+      setQrTableInput('');
       fetchTables();
     } catch (err) {
       alert(
@@ -418,6 +423,76 @@ const formatDateShort = (timestamp: number): string => {
           ? err.message
           : 'Không thể lưu số bàn, vui lòng thử lại'
       );
+    }
+  };
+
+  const handleEditTable = (table: { id: string; code: string }) => {
+    setEditingTable(table);
+    setEditingTableCode(table.code);
+  };
+
+  const handleUpdateTable = async () => {
+    if (!editingTable || !editingTableCode.trim()) {
+      alert('Vui lòng nhập số bàn');
+      return;
+    }
+    try {
+      setIsSavingTable(true);
+      const token = localStorage.getItem('qr_food_order_token');
+      if (!token) {
+        alert('Vui lòng đăng nhập lại');
+        return;
+      }
+      const res = await fetch(`${API_BASE_URL}/api/tables/${editingTable.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ code: editingTableCode.trim() })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể cập nhật bàn');
+      }
+      alert('Đã cập nhật số bàn thành công');
+      setEditingTable(null);
+      setEditingTableCode('');
+      fetchTables();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật bàn');
+    } finally {
+      setIsSavingTable(false);
+    }
+  };
+
+  const handleDeleteTable = async (tableId: string) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa bàn này?')) {
+      return;
+    }
+    try {
+      setDeletingTableId(tableId);
+      const token = localStorage.getItem('qr_food_order_token');
+      if (!token) {
+        alert('Vui lòng đăng nhập lại');
+        return;
+      }
+      const res = await fetch(`${API_BASE_URL}/api/tables/${tableId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể xóa bàn');
+      }
+      alert('Đã xóa bàn thành công');
+      fetchTables();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể xóa bàn');
+    } finally {
+      setDeletingTableId(null);
     }
   };
 
@@ -2437,63 +2512,139 @@ const formatDateShort = (timestamp: number): string => {
 
         {/* QR CODE TAB */}
         {activeTab === 'qr' && (
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 max-w-lg mx-auto text-center">
-                <QrCode className="w-16 h-16 text-brand-600 mx-auto mb-4" />
-                <h2 className="text-2xl font-bold mb-2">Tạo mã QR cho bàn</h2>
-                <p className="text-gray-500 mb-6">Nhập số bàn để tạo link/QR code cho khách hàng quét.</p>
-                
-                <div className="flex space-x-2 mb-6">
-                    <input 
-                        type="text" 
-                        placeholder="Số bàn (VD: 5, VIP1)" 
-                        className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                        value={qrTableInput}
-                        onChange={(e) => setQrTableInput(e.target.value)}
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Tạo mã QR cho bàn</h2>
+            
+            {/* Form tạo bàn */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold mb-4 flex items-center">
+                <QrCode className="w-5 h-5 mr-2 text-brand-600" /> Tạo mã QR cho bàn
+              </h3>
+              <p className="text-gray-500 mb-4 text-sm">Nhập số bàn để tạo link/QR code cho khách hàng quét.</p>
+              
+              <div className="flex space-x-2">
+                <input 
+                  type="text" 
+                  placeholder="Số bàn (VD: 5, VIP1)" 
+                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                  value={qrTableInput}
+                  onChange={(e) => setQrTableInput(e.target.value)}
+                />
+                <Button type="button" variant="secondary" onClick={handleSaveTable}>
+                  Lưu bàn
+                </Button>
+              </div>
+
+              {qrTableInput && (
+                <div className="mt-6 bg-gray-50 p-6 rounded-xl border border-gray-200 flex flex-col items-center">
+                  <p className="text-sm text-gray-500 mb-2 w-full text-left font-medium">Link đặt món:</p>
+                  <div className="w-full bg-white p-3 rounded-lg border border-gray-200 mb-4 flex items-center justify-between group cursor-pointer hover:border-brand-300 transition-colors"
+                       onClick={() => navigator.clipboard.writeText(getOrderUrl()).then(() => alert('Đã copy link!'))}
+                       title="Click để copy">
+                    <code className="text-xs text-brand-600 truncate flex-1">
+                      {getOrderUrl()}
+                    </code>
+                  </div>
+                  
+                  <div className="bg-white p-3 border-2 border-brand-500 rounded-xl shadow-sm mb-3">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(getOrderUrl())}`} 
+                      alt={`QR Code for Table ${qrTableInput}`}
+                      className="w-48 h-48 object-contain"
                     />
-                    <Button type="button" variant="secondary" onClick={handleSaveTable}>
-                      Lưu bàn
-                    </Button>
+                  </div>
+                  
+                  <div className="font-bold text-gray-900 text-lg">Bàn số {qrTableInput}</div>
+                  <p className="mt-2 text-sm text-gray-500">In hình này và dán lên bàn</p>
                 </div>
+              )}
+            </div>
 
-                {qrTableInput && (
-                    <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 flex flex-col items-center">
-                        <p className="text-sm text-gray-500 mb-2 w-full text-left font-medium">Link đặt món:</p>
-                        <div className="w-full bg-white p-3 rounded-lg border border-gray-200 mb-4 flex items-center justify-between group cursor-pointer hover:border-brand-300 transition-colors"
-                             onClick={() => navigator.clipboard.writeText(getOrderUrl()).then(() => alert('Đã copy link!'))}
-                             title="Click để copy">
-                             <code className="text-xs text-brand-600 truncate flex-1">
-                                {getOrderUrl()}
-                             </code>
-                        </div>
-                        
-                        <div className="bg-white p-3 border-2 border-brand-500 rounded-xl shadow-sm mb-3">
-                            <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(getOrderUrl())}`} 
-                              alt={`QR Code for Table ${qrTableInput}`}
-                              className="w-48 h-48 object-contain"
-                            />
-                        </div>
-                        
-                        <div className="font-bold text-gray-900 text-lg">Bàn số {qrTableInput}</div>
-                        <p className="mt-2 text-sm text-gray-500">In hình này và dán lên bàn</p>
-                    </div>
-                )}
-
-                {tables.length > 0 && (
-                  <div className="mt-10 text-left">
-                    <h3 className="text-lg font-bold mb-4 text-gray-800">Danh sách bàn đã lưu</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {tables.map(table => {
-                        const origin = window.location.origin;
-                        const baseUrl = origin === 'null' ? 'http://localhost:3000' : origin;
-                        const tableUrl = `${baseUrl}/#/order?r=${restaurant.id}&t=${table.code}`;
-                        return (
-                          <div key={table.id} className="border rounded-xl p-4 bg-gray-50 flex flex-col space-y-3">
-                            <div>
-                              <p className="text-xs text-gray-500 uppercase">Số bàn</p>
-                              <p className="text-xl font-bold text-gray-900">{table.code}</p>
+            {/* Danh sách bàn đã lưu */}
+            {tables.length > 0 && (
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="text-lg font-bold mb-4">Danh sách bàn đã lưu</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {tables.map(table => {
+                    const origin = window.location.origin;
+                    const baseUrl = origin === 'null' ? 'http://localhost:3000' : origin;
+                    const tableUrl = `${baseUrl}/#/order?r=${restaurant.id}&t=${table.code}`;
+                    const isEditing = editingTable?.id === table.id;
+                    const isDeleting = deletingTableId === table.id;
+                    
+                    return (
+                      <div key={table.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-500 uppercase mb-1">Số bàn</p>
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editingTableCode}
+                                  onChange={(e) => setEditingTableCode(e.target.value)}
+                                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base font-bold focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                                  placeholder="Số bàn"
+                                  autoFocus
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleUpdateTable}
+                                    disabled={isSavingTable}
+                                    className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-semibold transition-colors"
+                                  >
+                                    {isSavingTable ? 'Đang lưu...' : 'Lưu'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingTable(null);
+                                      setEditingTableCode('');
+                                    }}
+                                    className="flex-1 px-3 py-1.5 bg-gray-400 text-white rounded-lg hover:bg-gray-500 text-sm font-semibold transition-colors"
+                                  >
+                                    Hủy
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xl font-bold text-gray-900 truncate">{table.code}</p>
+                            )}
+                          </div>
+                          {!isEditing && (
+                            <div className="flex items-center gap-2 ml-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleEditTable(table)}
+                                title="Sửa bàn"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={() => handleDeleteTable(table.id)}
+                                disabled={isDeleting}
+                                title="Xóa bàn"
+                              >
+                                {isDeleting ? (
+                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : (
+                                  <Trash className="w-4 h-4" />
+                                )}
+                              </Button>
                             </div>
-                            <div className="bg-white p-2 border rounded-lg">
+                          )}
+                        </div>
+                        
+                        {!isEditing && (
+                          <>
+                            <div className="bg-white p-3 border border-gray-200 rounded-lg mb-3">
                               <img
                                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tableUrl)}`}
                                 alt={`QR bàn ${table.code}`}
@@ -2502,18 +2653,27 @@ const formatDateShort = (timestamp: number): string => {
                             </div>
                             <button
                               type="button"
-                              className="text-xs text-brand-600 hover:text-brand-800 truncate text-left"
+                              className="w-full text-xs text-brand-600 hover:text-brand-800 truncate text-left p-2 bg-white rounded border border-gray-200 hover:border-brand-300 transition-colors"
                               onClick={() => navigator.clipboard.writeText(tableUrl).then(() => alert('Đã copy link bàn!'))}
+                              title="Click để copy link"
                             >
                               {tableUrl}
                             </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {tables.length === 0 && (
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <p className="text-gray-500 text-center py-4">Chưa có bàn nào được tạo</p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* BANK TAB */}

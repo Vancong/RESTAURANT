@@ -3,6 +3,7 @@ import { MenuItem, Restaurant, CartItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { ShoppingBag, X, ChefHat, Sparkles, Clock, MapPin, QrCode, Plus, ChevronRight, Phone } from 'lucide-react';
 import { suggestChefRecommendation } from '../services/geminiService';
+import { ToastContainer, ToastNotification } from './Toast';
 
 interface CustomerViewProps {
   restaurant: Restaurant;
@@ -26,6 +27,22 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [chefSuggestion, setChefSuggestion] = useState<string>('');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  const showToast = (type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => {
+    const newToast: ToastNotification = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      type,
+      title,
+      message,
+      timestamp: Date.now()
+    };
+    setToasts(prev => [...prev, newToast]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
 
   const categories = useMemo(() => {
     const cats = new Set(menu.map(item => item.category));
@@ -79,7 +96,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
 
   const handleCheckout = async () => {
     if (!customerName.trim()) {
-      alert('Vui lòng nhập tên của bạn');
+      showToast('warning', 'Thiếu thông tin', 'Vui lòng nhập tên của bạn');
       return;
     }
     if (isPlacingOrder) {
@@ -93,11 +110,11 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
       setCustomerName('');
       setIsCartOpen(false);
       setChefSuggestion('');
-      alert("✅ Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.");
+      showToast('success', 'Thành công', '✅ Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.');
     } catch (err) {
-      // Hiển thị alert cho mọi lỗi
+      // Hiển thị toast cho mọi lỗi
       const errorMessage = err instanceof Error ? err.message : 'Không thể đặt món. Vui lòng thử lại.';
-      alert(errorMessage);
+      showToast('error', 'Lỗi', errorMessage);
     } finally {
       setIsPlacingOrder(false);
     }
@@ -488,6 +505,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
         </div>
       )}
       </div>
+      <ToastContainer notifications={toasts} onClose={removeToast} />
     </>
   );
 };
