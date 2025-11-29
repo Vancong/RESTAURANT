@@ -2,7 +2,8 @@ import mongoose, { Schema, Document, Types } from "mongoose";
 
 export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
-  RESTAURANT_ADMIN = "RESTAURANT_ADMIN"
+  RESTAURANT_ADMIN = "RESTAURANT_ADMIN",
+  STAFF = "STAFF"
 }
 
 export interface IUser extends Document {
@@ -10,6 +11,7 @@ export interface IUser extends Document {
   passwordHash: string;
   role: UserRole;
   restaurantId?: Types.ObjectId;
+  isActive?: boolean;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -32,6 +34,10 @@ const UserSchema = new Schema<IUser>(
     restaurantId: {
       type: Schema.Types.ObjectId,
       ref: "Restaurant"
+    },
+    isActive: {
+      type: Boolean,
+      default: true
     }
   },
   { timestamps: true }

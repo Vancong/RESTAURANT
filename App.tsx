@@ -5,6 +5,7 @@ import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { CustomerView } from './components/CustomerView';
+import { StaffDashboard } from './components/StaffDashboard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -39,6 +40,9 @@ const App: React.FC = () => {
         setCurrentRestaurantId(null);
       } else if (payload.role === Role.RESTAURANT_ADMIN && payload.restaurantId) {
         setRole(Role.RESTAURANT_ADMIN);
+        setCurrentRestaurantId(payload.restaurantId);
+      } else if (payload.role === Role.STAFF && payload.restaurantId) {
+        setRole(Role.STAFF);
         setCurrentRestaurantId(payload.restaurantId);
       } else {
         // Token không hợp lệ cho app này
@@ -126,7 +130,7 @@ const App: React.FC = () => {
         const res = await fetch(`${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}`);
         if (!res.ok) {
           setMenuItems([]);
-          return;
+        return;
         }
         const data: {
           _id: string;
@@ -158,6 +162,43 @@ const App: React.FC = () => {
     fetchMenu();
   }, [currentRestaurantId]);
 
+  // Fetch orders for restaurant admin and staff
+  useEffect(() => {
+    if ((role !== Role.RESTAURANT_ADMIN && role !== Role.STAFF) || !currentRestaurantId) {
+      return;
+    }
+
+    const fetchOrders = async () => {
+      try {
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        if (!token) return;
+        const res = await fetch(`${API_BASE_URL}/api/staff/orders`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: Order[] = data.map((o: any) => ({
+          id: o._id,
+          restaurantId: o.restaurantId,
+          tableNumber: o.tableNumber,
+          items: o.items,
+          totalAmount: o.totalAmount,
+          status: o.status as OrderStatus,
+          timestamp: new Date(o.createdAt).getTime(),
+          note: o.note
+        }));
+        setOrders(mapped);
+      } catch (e) {
+        console.error('Không thể tải đơn hàng', e);
+      }
+    };
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000); // Refresh mỗi 5 giây
+    return () => clearInterval(interval);
+  }, [role, currentRestaurantId]);
+
   // Actions
   const handleLogin = async (username: string, password: string) => {
     try {
@@ -186,7 +227,10 @@ const App: React.FC = () => {
         setRole(Role.SUPER_ADMIN);
         setCurrentRestaurantId(null);
       } else if (data.user.role === Role.RESTAURANT_ADMIN && data.user.restaurantId) {
-        setRole(Role.RESTAURANT_ADMIN);
+      setRole(Role.RESTAURANT_ADMIN);
+        setCurrentRestaurantId(data.user.restaurantId);
+      } else if (data.user.role === Role.STAFF && data.user.restaurantId) {
+        setRole(Role.STAFF);
         setCurrentRestaurantId(data.user.restaurantId);
       } else {
         throw new Error('Không xác định được quyền truy cập.');
@@ -416,24 +460,73 @@ const App: React.FC = () => {
     }
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
+  const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/staff/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể cập nhật đơn hàng');
+      }
+      const updated = await res.json();
+      setOrders(orders.map(o => 
+        o.id === orderId 
+          ? { 
+              ...o, 
+              status: updated.status as OrderStatus 
+            } 
+          : o
+      ));
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật đơn hàng');
+    }
   };
 
-  const placeOrder = (items: CartItem[], note: string) => {
+  const placeOrder = async (items: CartItem[], note: string) => {
     if (!currentRestaurantId || !customerTable) return;
     
-    const newOrder: Order = {
-      id: `order_${Date.now()}`,
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
       restaurantId: currentRestaurantId,
       tableNumber: customerTable,
       items,
-      totalAmount: items.reduce((sum, i) => sum + (i.price * i.quantity), 0),
-      status: OrderStatus.PENDING,
-      timestamp: Date.now(),
-      note
-    };
-    setOrders([...orders, newOrder]);
+          note
+        })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể đặt món');
+      }
+      const created = await res.json();
+      const newOrder: Order = {
+        id: created._id,
+        restaurantId: created.restaurantId,
+        tableNumber: created.tableNumber,
+        items: created.items,
+        totalAmount: created.totalAmount,
+        status: created.status as OrderStatus,
+        timestamp: new Date(created.createdAt).getTime(),
+        note: created.note
+      };
+      setOrders(prev => [newOrder, ...prev]);
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
   };
 
   // Render Logic
@@ -507,6 +600,19 @@ const App: React.FC = () => {
         onUpdateMenuItem={updateMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
         onDeleteMenuItem={deleteMenuItem}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (role === Role.STAFF && currentRestaurantId) {
+    const rest = restaurants.find(r => r.id === currentRestaurantId);
+    if (!rest) return <div>Lỗi dữ liệu</div>;
+
+    return (
+      <StaffDashboard
+        restaurantId={currentRestaurantId}
+        restaurantName={rest.name}
         onLogout={handleLogout}
       />
     );

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -26,7 +26,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onDeleteMenuItem,
   onLogout
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
@@ -41,6 +41,15 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [staffList, setStaffList] = useState<{ id: string; username: string; isActive: boolean }[]>([]);
+  const [newStaffUsername, setNewStaffUsername] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [isCreatingStaff, setIsCreatingStaff] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<{ id: string; username: string } | null>(null);
+  const [editStaffUsername, setEditStaffUsername] = useState('');
+  const [editStaffPassword, setEditStaffPassword] = useState('');
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -187,6 +196,29 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
     fetchCategories();
   }, [restaurant.id]);
 
+  const fetchStaff = async () => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/api/staff`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) return;
+      const data: { id: string; username: string; isActive: boolean }[] = await res.json();
+      setStaffList(data);
+    } catch (err) {
+      console.error('Không thể tải danh sách nhân viên', err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'staff') {
+      fetchStaff();
+    }
+  }, [activeTab, restaurant.id]);
+
   const CategoryCreator: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
@@ -271,6 +303,12 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'qr' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
           >
             <QrCode className="w-5 h-5 mr-3" /> Mã QR
+          </button>
+          <button 
+            onClick={() => setActiveTab('staff')}
+            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'staff' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Users className="w-5 h-5 mr-3" /> Nhân viên
           </button>
           <div className="pt-4 mt-4 border-t border-gray-100 space-y-2">
             <button
@@ -607,6 +645,174 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 )}
             </div>
         )}
+
+        {/* STAFF TAB */}
+        {activeTab === 'staff' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Quản lý nhân viên</h2>
+            
+            {/* Form tạo nhân viên */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold mb-4 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-brand-600" /> Tạo tài khoản nhân viên
+              </h3>
+              <form
+                className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newStaffUsername || !newStaffPassword) {
+                    alert('Vui lòng nhập đầy đủ username và password');
+                    return;
+                  }
+                  try {
+                    setIsCreatingStaff(true);
+                    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                    if (!token) {
+                      throw new Error('Vui lòng đăng nhập lại');
+                    }
+                    const res = await fetch(`${API_BASE_URL}/api/staff`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        username: newStaffUsername.trim(),
+                        password: newStaffPassword
+                      })
+                    });
+                    const body = await res.json().catch(() => null);
+                    if (!res.ok) {
+                      throw new Error(body?.message || 'Không thể tạo nhân viên');
+                    }
+                    alert('Đã tạo tài khoản nhân viên thành công!');
+                    setNewStaffUsername('');
+                    setNewStaffPassword('');
+                    // Refresh danh sách nhân viên
+                    await fetchStaff();
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : 'Không thể tạo nhân viên');
+                  } finally {
+                    setIsCreatingStaff(false);
+                  }
+                }}
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Username</label>
+                  <input
+                    required
+                    type="text"
+                    className="mt-1 w-full border border-gray-300 rounded-md p-2"
+                    value={newStaffUsername}
+                    onChange={e => setNewStaffUsername(e.target.value)}
+                    placeholder="Tên đăng nhập"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  <input
+                    required
+                    type="password"
+                    className="mt-1 w-full border border-gray-300 rounded-md p-2"
+                    value={newStaffPassword}
+                    onChange={e => setNewStaffPassword(e.target.value)}
+                    placeholder="Mật khẩu"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="submit" disabled={isCreatingStaff}>
+                    {isCreatingStaff ? 'Đang tạo...' : 'Tạo nhân viên'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+
+            {/* Danh sách nhân viên */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h3 className="text-lg font-bold mb-4">Danh sách nhân viên</h3>
+              {staffList.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">Chưa có nhân viên nào</p>
+              ) : (
+                <div className="space-y-2">
+                  {staffList.map(staff => (
+                    <div
+                      key={staff.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        staff.isActive ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="font-medium">{staff.username}</span>
+                        {staff.isActive ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                            Đang hoạt động
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium">
+                            Đã khóa
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditingStaff({ id: staff.id, username: staff.username });
+                            setEditStaffUsername(staff.username);
+                            setEditStaffPassword('');
+                          }}
+                          title="Chỉnh sửa"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={staff.isActive ? "danger" : "secondary"}
+                          onClick={async () => {
+                            try {
+                              setTogglingStaffId(staff.id);
+                              const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                              if (!token) {
+                                throw new Error('Vui lòng đăng nhập lại');
+                              }
+                              const res = await fetch(`${API_BASE_URL}/api/staff/${staff.id}/toggle-active`, {
+                                method: 'PATCH',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  Authorization: `Bearer ${token}`
+                                }
+                              });
+                              const body = await res.json().catch(() => null);
+                              if (!res.ok) {
+                                throw new Error(body?.message || 'Không thể cập nhật trạng thái');
+                              }
+                              await fetchStaff();
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái');
+                            } finally {
+                              setTogglingStaffId(null);
+                            }
+                          }}
+                          disabled={togglingStaffId === staff.id}
+                          title={staff.isActive ? "Khóa nhân viên" : "Mở khóa nhân viên"}
+                        >
+                          {togglingStaffId === staff.id ? (
+                            '...'
+                          ) : staff.isActive ? (
+                            <Ban className="w-4 h-4" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Change Password Modal */}
@@ -713,6 +919,119 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   Hủy
                 </Button>
                 <Button type="submit">Lưu mật khẩu mới</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Staff Modal */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Chỉnh sửa nhân viên</h3>
+              <button
+                onClick={() => {
+                  setEditingStaff(null);
+                  setEditStaffUsername('');
+                  setEditStaffPassword('');
+                }}
+                className="p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!editStaffUsername.trim()) {
+                  alert('Vui lòng nhập username');
+                  return;
+                }
+                if (editStaffPassword && editStaffPassword.length < 6) {
+                  alert('Mật khẩu phải có ít nhất 6 ký tự');
+                  return;
+                }
+                try {
+                  setIsSavingStaff(true);
+                  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                  if (!token) {
+                    throw new Error('Vui lòng đăng nhập lại');
+                  }
+                  const body: { username?: string; password?: string } = {
+                    username: editStaffUsername.trim()
+                  };
+                  if (editStaffPassword) {
+                    body.password = editStaffPassword;
+                  }
+                  const res = await fetch(`${API_BASE_URL}/api/staff/${editingStaff.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                  });
+                  const responseBody = await res.json().catch(() => null);
+                  if (!res.ok) {
+                    throw new Error(responseBody?.message || 'Không thể cập nhật nhân viên');
+                  }
+                  alert('Đã cập nhật nhân viên thành công!');
+                  setEditingStaff(null);
+                  setEditStaffUsername('');
+                  setEditStaffPassword('');
+                  await fetchStaff();
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Không thể cập nhật nhân viên');
+                } finally {
+                  setIsSavingStaff(false);
+                }
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  value={editStaffUsername}
+                  onChange={(e) => setEditStaffUsername(e.target.value)}
+                  placeholder="Tên đăng nhập"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mật khẩu mới (để trống nếu không đổi)
+                </label>
+                <input
+                  type="password"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  value={editStaffPassword}
+                  onChange={(e) => setEditStaffPassword(e.target.value)}
+                  placeholder="Mật khẩu mới (tùy chọn)"
+                />
+                <p className="text-xs text-gray-500 mt-1">Chỉ nhập nếu muốn đổi mật khẩu</p>
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditingStaff(null);
+                    setEditStaffUsername('');
+                    setEditStaffPassword('');
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSavingStaff}>
+                  {isSavingStaff ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </Button>
               </div>
             </form>
           </div>

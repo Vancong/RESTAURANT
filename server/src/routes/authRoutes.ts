@@ -7,8 +7,8 @@ import { AuthRequest, requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
-const TOKEN_EXPIRY = process.env.JWT_EXPIRY || "12h";
+const JWT_SECRET: string = process.env.JWT_SECRET || "change-me";
+const TOKEN_EXPIRY: string = process.env.JWT_EXPIRY || "12h";
 
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
@@ -28,13 +28,22 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
   }
 
+  // Kiểm tra nhân viên có bị khóa không (sau khi xác thực password)
+  if (user.role === UserRole.STAFF && user.isActive === false) {
+    return res.status(403).json({ message: "Tài khoản nhân viên đã bị khóa" });
+  }
+
   const payload = {
     sub: user._id.toString(),
     role: user.role,
     restaurantId: user.restaurantId?.toString() || null
   };
 
-  const token = jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+  const token = jwt.sign(
+    payload,
+    JWT_SECRET,
+    { expiresIn: TOKEN_EXPIRY } as jwt.SignOptions
+  );
 
   res.json({
     token,
