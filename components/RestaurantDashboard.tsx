@@ -921,7 +921,7 @@ const formatDateShort = (timestamp: number): string => {
       )}
 
       {/* Sidebar */}
-      <aside className={`bg-gradient-to-b from-white to-orange-50/50 w-full md:w-72 border-r border-orange-100 flex-shrink-0 shadow-lg fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out ${
+      <aside className={`bg-white w-full md:w-72 border-r border-orange-100 flex-shrink-0 shadow-lg fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
         <div className="p-6 border-b border-orange-100 bg-gradient-to-r from-brand-600 to-brand-700">
