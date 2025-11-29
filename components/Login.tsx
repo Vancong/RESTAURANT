@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './Button';
-import { ChefHat, Lock, User } from 'lucide-react';
+import { Lock, User } from 'lucide-react';
+import { AppIcon } from './AppIcon';
 
 interface LoginProps {
   onLogin: (identifier: string, password: string) => void;
@@ -49,10 +50,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, error, onRequestPasswordR
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="bg-brand-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-            <ChefHat className="w-8 h-8 text-brand-600" />
+          <div className="bg-gradient-to-br from-red-50 to-orange-50 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg border border-red-100">
+            <AppIcon size={48} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản Lý Nhà Hàng</h1>
+          <h1 className="text-2xl font-bold text-gray-900">QR Food Order</h1>
           <p className="text-gray-500 text-sm mt-1">Đăng nhập để vào hệ thống</p>
         </div>
 

@@ -1,6 +1,7 @@
 ## QR Food Order Server
 
 ### Cấu trúc
+
 - `src/index.ts`: entry, cấu hình Express + routes
 - `src/config/db.ts`: logic kết nối MongoDB
 - `src/models/Restaurant.ts`: schema nhà hàng
@@ -10,20 +11,14 @@
 - `src/scripts/createSuperAdmin.ts`: script tạo user admin ban đầu
 
 ### Thiết lập
+
 ```bash
 cd server
 npm install
 ```
 
-Tạo file `.env` (cùng cấp `package.json`) với nội dung:
-```
-PORT=5000
-MONGODB_URI=mongodb+srv://cong113377:yKZf988eXonTbJ3B@cluster0.7mpkliv.mongodb.net/nhahang?retryWrites=true&w=majority&appName=Cluster0
-JWT_SECRET=your_super_secret_key
-JWT_EXPIRY=12h
-```
-
 ### Chạy server
+
 ```bash
 npm run dev   # dùng tsx watch
 # hoặc build + start
@@ -32,16 +27,18 @@ npm start
 ```
 
 ### Seed Super Admin
+
 ```bash
 npm run seed:super-admin -- admin admin123
 ```
+
 (đổi `admin admin123` thành tài khoản/mật khẩu bạn muốn)
 
 ### API mẫu
+
 - `POST /api/auth/login` (body: `{ "username": "", "password": "" }`)
 - `GET /api/health`
 - `GET /api/restaurants`
 - `POST /api/restaurants` ({ name, address?, isActive? })
 - `PATCH /api/restaurants/:id`
 - `DELETE /api/restaurants/:id`
-

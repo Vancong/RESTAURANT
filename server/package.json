@@ -1,7 +1,7 @@
 {
   "name": "qr-food-order-server",
   "version": "1.0.0",
-  "description": "Node.js + Express server for QR Food Order Pro",
+  "description": "Node.js + Express server for QR Food Order",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

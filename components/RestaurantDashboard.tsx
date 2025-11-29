@@ -93,8 +93,9 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     message: string;
     timestamp: number;
   }>>([]);
-  const [notifiedOrderIds, setNotifiedOrderIds] = useState<Set<string>>(new Set());
-  const [notifiedStaffIds, setNotifiedStaffIds] = useState<Set<string>>(new Set());
+  // Use refs to track notifications to avoid re-render loops
+  const notifiedOrderIdsRef = useRef<Set<string>>(new Set());
+  const notifiedStaffIdsRef = useRef<Set<string>>(new Set());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Stats state
@@ -528,7 +529,7 @@ const formatDateShort = (timestamp: number): string => {
   }, [activeTab, restaurant.id]);
 
   // Notification logic
-  const addNotification = (type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => {
+  const addNotification = useCallback((type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => {
     const notification: ToastNotification = {
       id: `${Date.now()}-${Math.random()}`,
       type,
@@ -537,7 +538,7 @@ const formatDateShort = (timestamp: number): string => {
       timestamp: Date.now()
     };
     setNotifications(prev => [...prev, notification]);
-  };
+  }, []);
 
   const removeNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -603,14 +604,39 @@ const formatDateShort = (timestamp: number): string => {
 
   // Track orders for notifications
   const previousOrdersRef = useRef<Order[]>([]);
+  const isInitializedRef = useRef(false);
   
   useEffect(() => {
+    // Khởi tạo lần đầu: nếu chưa có previousOrders và đã có orders, set ngay mà không thông báo
+    if (!isInitializedRef.current && orders.length > 0) {
+      previousOrdersRef.current = orders;
+      // Đánh dấu tất cả orders hiện tại là đã được thông báo để tránh spam khi refresh
+      orders.forEach(order => {
+        notifiedOrderIdsRef.current.add(order.id);
+        if (order.status === OrderStatus.CANCELLED) {
+          notifiedOrderIdsRef.current.add(`cancelled-${order.id}`);
+        }
+        if (order.status === OrderStatus.COMPLETED) {
+          notifiedOrderIdsRef.current.add(`completed-${order.id}`);
+        }
+        if (order.status === OrderStatus.PENDING) {
+          const orderAge = Date.now() - order.timestamp;
+          const tenMinutes = 10 * 60 * 1000;
+          if (orderAge > tenMinutes) {
+            notifiedOrderIdsRef.current.add(`long-pending-${order.id}`);
+          }
+        }
+      });
+      isInitializedRef.current = true;
+      return; // Không thông báo gì khi khởi tạo
+    }
+    
     // Check for new orders
     const previousOrderIds = new Set(previousOrdersRef.current.map(o => o.id));
     const newOrders = orders.filter(o => !previousOrderIds.has(o.id));
     
     newOrders.forEach(order => {
-      if (!notifiedOrderIds.has(order.id)) {
+      if (!notifiedOrderIdsRef.current.has(order.id)) {
         if (order.status === OrderStatus.PENDING) {
           addNotification(
             'info',
@@ -618,14 +644,14 @@ const formatDateShort = (timestamp: number): string => {
             `Bàn ${order.tableNumber} - ${order.totalAmount.toLocaleString('vi-VN')}đ${order.customerName ? ` - ${order.customerName}` : ''}`
           );
           playNotificationSound();
-          setNotifiedOrderIds(prev => new Set([...prev, order.id]));
+          notifiedOrderIdsRef.current.add(order.id);
         } else if (order.status === OrderStatus.CANCELLED) {
           addNotification(
             'error',
             '❌ Đơn hàng bị hủy',
             `Bàn ${order.tableNumber} đã bị hủy${order.customerName ? ` - ${order.customerName}` : ''}`
           );
-          setNotifiedOrderIds(prev => new Set([...prev, order.id]));
+          notifiedOrderIdsRef.current.add(order.id);
         }
       }
     });
@@ -634,19 +660,20 @@ const formatDateShort = (timestamp: number): string => {
     previousOrdersRef.current.forEach(prevOrder => {
       const currentOrder = orders.find(o => o.id === prevOrder.id);
       if (currentOrder && currentOrder.status !== prevOrder.status) {
-        if (currentOrder.status === OrderStatus.CANCELLED && !notifiedOrderIds.has(`cancelled-${currentOrder.id}`)) {
+        if (currentOrder.status === OrderStatus.CANCELLED && !notifiedOrderIdsRef.current.has(`cancelled-${currentOrder.id}`)) {
           addNotification(
             'error',
             '❌ Đơn hàng bị hủy',
             `Bàn ${currentOrder.tableNumber} đã bị hủy${currentOrder.customerName ? ` - ${currentOrder.customerName}` : ''}`
           );
-          setNotifiedOrderIds(prev => new Set([...prev, `cancelled-${currentOrder.id}`]));
-        } else if (currentOrder.status === OrderStatus.COMPLETED && prevOrder.status !== OrderStatus.COMPLETED) {
+          notifiedOrderIdsRef.current.add(`cancelled-${currentOrder.id}`);
+        } else if (currentOrder.status === OrderStatus.COMPLETED && prevOrder.status !== OrderStatus.COMPLETED && !notifiedOrderIdsRef.current.has(`completed-${currentOrder.id}`)) {
           addNotification(
             'success',
             '✅ Đơn hàng hoàn thành',
             `Bàn ${currentOrder.tableNumber} đã hoàn thành - ${currentOrder.totalAmount.toLocaleString('vi-VN')}đ`
           );
+          notifiedOrderIdsRef.current.add(`completed-${currentOrder.id}`);
         }
       }
     });
@@ -657,41 +684,53 @@ const formatDateShort = (timestamp: number): string => {
       if (order.status === OrderStatus.PENDING) {
         const orderAge = now - order.timestamp;
         const tenMinutes = 10 * 60 * 1000;
-        if (orderAge > tenMinutes && !notifiedOrderIds.has(`long-pending-${order.id}`)) {
+        if (orderAge > tenMinutes && !notifiedOrderIdsRef.current.has(`long-pending-${order.id}`)) {
           const minutes = Math.floor(orderAge / 60000);
           addNotification(
             'warning',
             '⏰ Đơn hàng chờ lâu',
             `Bàn ${order.tableNumber} đã chờ ${minutes} phút - Cần xử lý ngay!`
           );
-          setNotifiedOrderIds(prev => new Set([...prev, `long-pending-${order.id}`]));
+          notifiedOrderIdsRef.current.add(`long-pending-${order.id}`);
         }
       }
     });
 
     previousOrdersRef.current = orders;
-  }, [orders, notifiedOrderIds]);
+  }, [orders, addNotification, playNotificationSound]);
 
   // Track staff for notifications
   const previousStaffRef = useRef<typeof staffList>([]);
+  const isStaffInitializedRef = useRef(false);
   
   useEffect(() => {
+    // Khởi tạo lần đầu: nếu chưa có previousStaff và đã có staffList, set ngay mà không thông báo
+    if (!isStaffInitializedRef.current && staffList.length > 0) {
+      previousStaffRef.current = staffList;
+      // Đánh dấu tất cả staff hiện tại là đã được thông báo để tránh spam khi refresh
+      staffList.forEach(staff => {
+        notifiedStaffIdsRef.current.add(staff.id);
+      });
+      isStaffInitializedRef.current = true;
+      return; // Không thông báo gì khi khởi tạo
+    }
+    
     const previousStaffIds = new Set(previousStaffRef.current.map(s => s.id));
     const newStaff = staffList.filter(s => !previousStaffIds.has(s.id));
     
     newStaff.forEach(staff => {
-      if (!notifiedStaffIds.has(staff.id)) {
+      if (!notifiedStaffIdsRef.current.has(staff.id)) {
         addNotification(
           'success',
           '👤 Nhân viên mới',
           `Đã tạo tài khoản nhân viên: ${staff.name || staff.username}`
         );
-        setNotifiedStaffIds(prev => new Set([...prev, staff.id]));
+        notifiedStaffIdsRef.current.add(staff.id);
       }
     });
 
     previousStaffRef.current = staffList;
-  }, [staffList, notifiedStaffIds]);
+  }, [staffList, addNotification]);
 
   const CategoryCreator: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
     const [name, setName] = useState('');
@@ -955,7 +994,7 @@ const formatDateShort = (timestamp: number): string => {
           >
             <Users className={`w-5 h-5 mr-3 ${activeTab === 'staff' ? 'text-white' : 'text-brand-600'}`} /> Nhân viên
           </button>
-          <button 
+            <button
             onClick={() => {
               setActiveTab('bank');
               setIsMobileMenuOpen(false);
@@ -967,8 +1006,8 @@ const formatDateShort = (timestamp: number): string => {
             }`}
           >
             <CreditCard className={`w-5 h-5 mr-3 ${activeTab === 'bank' ? 'text-white' : 'text-brand-600'}`} /> Ngân hàng
-          </button>
-          <button 
+            </button>
+            <button
             onClick={() => {
               setActiveTab('settings');
               setIsMobileMenuOpen(false);
@@ -1083,7 +1122,7 @@ const formatDateShort = (timestamp: number): string => {
                             <span>
                               Thanh toán: <span className="font-semibold text-brand-600">
                                 {order.paymentMethod === PaymentMethod.CASH ? 'Tiền mặt' : 'Chuyển khoản'}
-                              </span>
+                          </span>
                             </span>
                           </div>
                         )}
@@ -1096,7 +1135,7 @@ const formatDateShort = (timestamp: number): string => {
                                order.status === OrderStatus.COMPLETED ? 'Thanh toán' :
                                order.status === OrderStatus.CANCELLED ? 'Hủy' : 'Cập nhật'} bởi: <span className="font-semibold text-brand-600">{order.updatedByName}</span>
                             </span>
-                          </div>
+                    </div>
                         )}
                       </div>
                     </div>
@@ -1120,7 +1159,7 @@ const formatDateShort = (timestamp: number): string => {
                       ))}
                     </ul>
                   </div>
-
+                  
                   {/* Note */}
                   {order.note && (
                     <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-lg p-2.5 mb-3">
@@ -1141,7 +1180,7 @@ const formatDateShort = (timestamp: number): string => {
                     </div>
                     
                     <div className="flex gap-2">
-                      {order.status === OrderStatus.PENDING && (
+                    {order.status === OrderStatus.PENDING && (
                         <Button 
                           size="sm" 
                           onClick={() => onUpdateOrderStatus(order.id, OrderStatus.CONFIRMED)}
@@ -1150,8 +1189,8 @@ const formatDateShort = (timestamp: number): string => {
                           <CheckCircle2 className="w-4 h-4 mr-1.5" />
                           Nhận đơn
                         </Button>
-                      )}
-                      {order.status === OrderStatus.CONFIRMED && (
+                    )}
+                    {order.status === OrderStatus.CONFIRMED && (
                         <>
                           <Button 
                             size="sm" 
@@ -1172,8 +1211,8 @@ const formatDateShort = (timestamp: number): string => {
                             Hủy
                           </Button>
                         </>
-                      )}
-                      {order.status === OrderStatus.SERVED && (
+                    )}
+                    {order.status === OrderStatus.SERVED && (
                         <Button 
                           size="sm" 
                           className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg text-white font-semibold" 
@@ -1195,8 +1234,8 @@ const formatDateShort = (timestamp: number): string => {
                           <XCircle className="w-4 h-4 mr-1.5" />
                           Hủy
                         </Button>
-                      )}
-                    </div>
+                    )}
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1298,8 +1337,8 @@ const formatDateShort = (timestamp: number): string => {
                                   <span className="text-gray-600 font-bold text-xs">
                                     {formatPrice(item.price * item.quantity)}₫
                                   </span>
-                                </div>
-                              ))}
+                </div>
+              ))}
                               {order.items.length > 2 && (
                                 <div className="pt-2 border-t border-blue-200">
                                   <p className="text-xs text-blue-600 font-semibold text-center">
@@ -1316,9 +1355,9 @@ const formatDateShort = (timestamp: number): string => {
                               <div className="flex items-start gap-2">
                                 <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
                                 <p className="text-xs text-amber-800 font-medium leading-relaxed">{order.note}</p>
-                              </div>
-                            </div>
-                          )}
+            </div>
+          </div>
+        )}
 
                           {/* Footer info */}
                           <div className="space-y-2 mb-3 pb-3 border-b border-gray-200">
@@ -1852,13 +1891,13 @@ const formatDateShort = (timestamp: number): string => {
                                  type="submit"
                             size="sm"
                                  className="flex-1 px-3 py-1.5 text-xs"
-                               >
+                          >
                                  <CheckCircle className="w-3 h-3 mr-1" />
                                  Lưu
-                               </Button>
-                               <Button
+                          </Button>
+                          <Button 
                                  type="button"
-                                 size="sm"
+                            size="sm" 
                                  variant="secondary"
                                  onClick={() => {
                                    setEditingCategoryId(null);
@@ -1867,8 +1906,8 @@ const formatDateShort = (timestamp: number): string => {
                                  className="px-3 py-1.5 text-xs"
                                >
                                  <X className="w-3 h-3" />
-                               </Button>
-                             </div>
+                          </Button>
+                        </div>
                            </form>
                          ) : (
                            // Hiển thị bình thường với nút sửa/xóa
@@ -1878,7 +1917,7 @@ const formatDateShort = (timestamp: number): string => {
                                <span className="text-sm font-semibold text-gray-700 group-hover:text-brand-700 transition-colors truncate">
                                  {cat.name}
                                </span>
-                             </div>
+                        </div>
                              <div className="flex items-center gap-2 flex-shrink-0">
                                <span className="inline-flex items-center justify-center px-2.5 py-1 bg-gradient-to-r from-brand-50 to-orange-50 text-brand-700 text-xs font-bold rounded-full border border-brand-200">
                                  {itemCount}
@@ -1905,8 +1944,8 @@ const formatDateShort = (timestamp: number): string => {
                                    <Trash className="w-4 h-4" />
                                  )}
                                </button>
-                             </div>
-                           </div>
+                    </div>
+               </div>
                          )}
                        </div>
                      );
@@ -1914,8 +1953,8 @@ const formatDateShort = (timestamp: number): string => {
                  )}
                </div>
                
-               <CategoryCreator onCreated={fetchCategories} />
-             </div>
+                 <CategoryCreator onCreated={fetchCategories} />
+               </div>
 
              {/* Danh sách món - Toàn bộ chiều rộng */}
              <div className="mb-4">
@@ -3034,7 +3073,7 @@ const formatDateShort = (timestamp: number): string => {
                 </div>
               )}
             </div>
-          </div>
+            </div>
         )}
 
         {/* STAFF TAB */}

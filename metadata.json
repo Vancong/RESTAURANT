@@ -1,5 +1,5 @@
 {
-  "name": "QR Food Order Pro",
+  "name": "QR Food Order",
   "description": "Nền tảng quản lý và đặt món tại nhà hàng qua mã QR. Hỗ trợ Super Admin, Quản lý nhà hàng và Khách hàng.",
   "requestFramePermissions": [
     "camera"
