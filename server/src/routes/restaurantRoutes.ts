@@ -3,8 +3,14 @@ import bcrypt from "bcryptjs";
 import { Restaurant, RestaurantStatus } from "../models/Restaurant.js";
 import { User, UserRole } from "../models/User.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { sendNewRestaurantWelcomeEmail } from "../services/emailService.js";
 
 const router = Router();
+const APP_BASE_URL =
+  process.env.APP_BASE_URL ||
+  process.env.FRONTEND_URL ||
+  process.env.CLIENT_URL ||
+  "http://localhost:5173";
 
 // Lấy danh sách nhà hàng
 router.get("/", async (_req, res) => {
@@ -51,6 +57,15 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Username đã tồn tại" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingEmailRestaurant = await Restaurant.findOne({
+      email: normalizedEmail
+    });
+    if (existingEmailRestaurant) {
+      return res.status(400).json({ message: "Email nhà hàng đã tồn tại" });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     const normalizedStatus =
@@ -60,7 +75,7 @@ router.post("/", async (req, res) => {
       name,
       username,
       ownerName,
-      email,
+      email: normalizedEmail,
       address,
       phone,
       status: normalizedStatus,
@@ -73,6 +88,19 @@ router.post("/", async (req, res) => {
       role: UserRole.RESTAURANT_ADMIN,
       restaurantId: restaurant._id
     });
+
+    try {
+      await sendNewRestaurantWelcomeEmail({
+        to: normalizedEmail,
+        restaurantName: name,
+        ownerName,
+        username,
+        password,
+        dashboardUrl: APP_BASE_URL
+      });
+    } catch (mailError) {
+      console.error("Không thể gửi email chào mừng nhà hàng mới", mailError);
+    }
 
     res.status(201).json(restaurant);
   } catch (error) {
