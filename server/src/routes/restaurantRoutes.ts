@@ -6,6 +6,7 @@ import { User, UserRole } from "../models/User.js";
 import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
 import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP } from "../services/emailService.js";
 import { EmailChangeToken } from "../models/EmailChangeToken.js";
+import { Order, OrderStatus } from "../models/Order.js";
 import fetch from "node-fetch";
 
 const router = Router();
@@ -15,10 +16,163 @@ const APP_BASE_URL =
   process.env.CLIENT_URL ||
   "http://localhost:5173";
 
-// Lấy danh sách nhà hàng
-router.get("/", async (_req, res) => {
-  const restaurants = await Restaurant.find().sort({ createdAt: -1 });
-  res.json(restaurants);
+// Thống kê tổng quan
+router.get("/stats/overview", async (_req, res) => {
+  try {
+    const restaurants = await Restaurant.find();
+    const activeCount = restaurants.filter(r => r.status === RestaurantStatus.ACTIVE).length;
+    const inactiveCount = restaurants.filter(r => r.status === RestaurantStatus.INACTIVE).length;
+
+    // Tính doanh thu cho từng nhà hàng (tất cả thời gian)
+    const restaurantIds = restaurants.map(r => r._id);
+    const orders = await Order.find({
+      restaurantId: { $in: restaurantIds },
+      status: { $in: [OrderStatus.COMPLETED, OrderStatus.SERVED] }
+    });
+
+    // Group theo restaurantId và tính tổng doanh thu
+    const revenueByRestaurant = new Map<string, number>();
+    orders.forEach(order => {
+      const restaurantId = order.restaurantId.toString();
+      const current = revenueByRestaurant.get(restaurantId) || 0;
+      revenueByRestaurant.set(restaurantId, current + order.totalAmount);
+    });
+
+    // Tạo danh sách nhà hàng với doanh thu
+    const restaurantsWithRevenue = restaurants.map(r => ({
+      id: r._id.toString(),
+      name: r.name,
+      revenue: revenueByRestaurant.get(r._id.toString()) || 0
+    }));
+
+    // Sắp xếp theo doanh thu giảm dần và lấy top 5
+    const top5Restaurants = restaurantsWithRevenue
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    res.json({
+      totalActive: activeCount,
+      totalInactive: inactiveCount,
+      top5Restaurants: top5Restaurants
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Không thể lấy thống kê tổng quan", error });
+  }
+});
+
+// Thống kê doanh thu nhà hàng
+router.get("/:id/stats/revenue", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "restaurantId không hợp lệ" });
+    }
+
+    const restaurant = await Restaurant.findById(id);
+    if (!restaurant) {
+      return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+    }
+
+    // Xây dựng query filter
+    const query: any = {
+      restaurantId: new mongoose.Types.ObjectId(id),
+      status: { $in: [OrderStatus.COMPLETED, OrderStatus.SERVED] }
+    };
+
+    // Thêm filter thời gian nếu có
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // End of day
+        query.createdAt.$lte = end;
+      }
+    }
+
+    const orders = await Order.find(query).sort({ createdAt: 1 });
+
+    // Tính tổng doanh thu và số đơn hàng
+    const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const totalOrders = orders.length;
+
+    // Group theo ngày để vẽ chart
+    const revenueByDate = new Map<string, number>();
+    orders.forEach(order => {
+      const dateKey = order.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
+      const current = revenueByDate.get(dateKey) || 0;
+      revenueByDate.set(dateKey, current + order.totalAmount);
+    });
+
+    // Chuyển thành array cho chart
+    const chartData = Array.from(revenueByDate.entries())
+      .map(([date, revenue]) => ({ date, revenue }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    res.json({
+      restaurantId: id,
+      restaurantName: restaurant.name,
+      totalRevenue,
+      totalOrders,
+      chartData
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Không thể lấy thống kê doanh thu", error });
+  }
+});
+
+// Lấy danh sách nhà hàng với tìm kiếm, lọc, sắp xếp
+router.get("/", async (req, res) => {
+  try {
+    const { search, status, sortBy, sortOrder } = req.query as {
+      search?: string;
+      status?: string;
+      sortBy?: string;
+      sortOrder?: string;
+    };
+
+    // Xây dựng query filter
+    const filter: any = {};
+
+    // Filter theo trạng thái
+    if (status && status !== "ALL") {
+      if (status === RestaurantStatus.ACTIVE || status === RestaurantStatus.INACTIVE) {
+        filter.status = status;
+      }
+    }
+
+    // Tìm kiếm theo tên, email, địa chỉ
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { address: searchRegex }
+      ];
+    }
+
+    // Xây dựng sort
+    let sort: any = { createdAt: -1 }; // Default: mới nhất trước
+    if (sortBy) {
+      const order = sortOrder === "asc" ? 1 : -1;
+      if (sortBy === "createdAt") {
+        sort = { createdAt: order };
+      } else if (sortBy === "name") {
+        sort = { name: order };
+      } else if (sortBy === "status") {
+        sort = { status: order };
+      }
+    }
+
+    const restaurants = await Restaurant.find(filter).sort(sort);
+    res.json(restaurants);
+  } catch (error) {
+    res.status(500).json({ message: "Không thể lấy danh sách nhà hàng", error });
+  }
 });
 
 // Tạo nhà hàng mới + tài khoản admin nhà hàng

@@ -88,3 +88,25 @@ export interface AppState {
     id?: string; // User ID
   } | null;
 }
+
+// Statistics interfaces
+export interface OverviewStats {
+  totalActive: number;
+  totalInactive: number;
+  top5Restaurants: Array<{
+    id: string;
+    name: string;
+    revenue: number;
+  }>;
+}
+
+export interface RestaurantRevenueStats {
+  restaurantId: string;
+  restaurantName: string;
+  totalRevenue: number;
+  totalOrders: number;
+  chartData: Array<{
+    date: string;
+    revenue: number;
+  }>;
+}

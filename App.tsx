@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initialOrders } from './services/mockData';
-import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role, NewRestaurantPayload, RestaurantStatus } from './types';
+import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role, NewRestaurantPayload, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
@@ -91,43 +91,50 @@ const App: React.FC = () => {
   }, [role]);
 
   // Load restaurants from backend
-  useEffect(() => {
-    const fetchRestaurants = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/restaurants`);
-        if (!res.ok) return;
-        const data: {
-          _id: string;
-          name: string;
-          username: string;
-          ownerName: string;
-          email: string;
-          address: string;
-          phone: string;
-          status: RestaurantStatus;
-          active: boolean;
-          bankAccount?: string;
-          bankName?: string;
-        }[] = await res.json();
-        const mapped: Restaurant[] = data.map(r => ({
-          id: r._id,
-          name: r.name,
-          username: r.username,
-          ownerName: r.ownerName,
-          email: r.email,
-          address: r.address,
-          phone: r.phone,
-          status: r.status,
-          active: r.active,
-          bankAccount: r.bankAccount,
-          bankName: r.bankName
-        }));
-        setRestaurants(mapped);
-      } catch (e) {
-        console.error('Không thể tải danh sách nhà hàng từ server', e);
-      }
-    };
+  const fetchRestaurants = async (search?: string, status?: string, sortBy?: string, sortOrder?: string) => {
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (status && status !== 'ALL') params.append('status', status);
+      if (sortBy) params.append('sortBy', sortBy);
+      if (sortOrder) params.append('sortOrder', sortOrder);
 
+      const url = `${API_BASE_URL}/api/restaurants${params.toString() ? `?${params.toString()}` : ''}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+        bankAccount?: string;
+        bankName?: string;
+      }[] = await res.json();
+      const mapped: Restaurant[] = data.map(r => ({
+        id: r._id,
+        name: r.name,
+        username: r.username,
+        ownerName: r.ownerName,
+        email: r.email,
+        address: r.address,
+        phone: r.phone,
+        status: r.status,
+        active: r.active,
+        bankAccount: r.bankAccount,
+        bankName: r.bankName
+      }));
+      setRestaurants(mapped);
+    } catch (e) {
+      console.error('Không thể tải danh sách nhà hàng từ server', e);
+    }
+  };
+
+  useEffect(() => {
     fetchRestaurants();
   }, []);
 
@@ -628,9 +635,12 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
+
+
           emailChangeOtp: data.emailChangeOtp,
           bankAccount: data.bankAccount,
           bankName: data.bankName
+
         })
       });
       const body = await res.json().catch(() => null);
@@ -735,6 +745,37 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchOverviewStats = async (): Promise<OverviewStats> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/stats/overview`);
+      if (!res.ok) {
+        throw new Error('Không thể tải thống kê tổng quan');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
+  const fetchRestaurantStats = async (restaurantId: string, startDate?: string, endDate?: string): Promise<RestaurantRevenueStats> => {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+
+      const url = `${API_BASE_URL}/api/restaurants/${restaurantId}/stats/revenue${params.toString() ? `?${params.toString()}` : ''}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error('Không thể tải thống kê doanh thu');
+      }
+      return await res.json();
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   if (role === Role.SUPER_ADMIN) {
     return (
       <SuperAdminDashboard 
@@ -744,6 +785,9 @@ const App: React.FC = () => {
         onResetRestaurantPassword={resetRestaurantPassword}
         onUpdateRestaurant={updateRestaurantBySuperAdmin}
         onLogout={handleLogout}
+        onFetchRestaurants={fetchRestaurants}
+        onFetchOverviewStats={fetchOverviewStats}
+        onFetchRestaurantStats={fetchRestaurantStats}
       />
     );
   }
