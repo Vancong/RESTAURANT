@@ -628,12 +628,9 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
-<<<<<<< Updated upstream
-          emailChangeOtp: data.emailChangeOtp
-=======
+          emailChangeOtp: data.emailChangeOtp,
           bankAccount: data.bankAccount,
           bankName: data.bankName
->>>>>>> Stashed changes
         })
       });
       const body = await res.json().catch(() => null);
