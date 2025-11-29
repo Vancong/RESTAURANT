@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: qr-food-order-api
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGODB_URI
+        sync: false  # Bạn cần thêm giá trị này trên Render dashboard
+      - key: JWT_SECRET
+        sync: false  # Bạn cần thêm giá trị này trên Render dashboard
+      - key: JWT_EXPIRY
+        value: 12h
+      # Optional: Email service
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        value: false
+      - key: MAIL_FROM
+        sync: false
+
