@@ -103,7 +103,8 @@ router.get("/:id/stats/revenue", async (req, res) => {
     // Group theo ngày để vẽ chart
     const revenueByDate = new Map<string, number>();
     orders.forEach(order => {
-      const dateKey = order.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
+      const createdAt = order.createdAt || new Date(); // Fallback nếu không có createdAt
+      const dateKey = createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
       const current = revenueByDate.get(dateKey) || 0;
       revenueByDate.set(dateKey, current + order.totalAmount);
     });
