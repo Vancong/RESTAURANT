@@ -162,6 +162,68 @@ const parsePrice = (priceString: string): number => {
   return isNaN(num) ? 0 : num;
 };
 
+// Helper function để format ngày thân thiện: "Hôm nay", "Hôm qua", "Thứ X", hoặc "DD/MM/YYYY"
+const formatDate = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const orderDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  
+  const timeStr = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  
+  // So sánh ngày (bỏ qua giờ)
+  if (orderDate.getTime() === today.getTime()) {
+    return `Hôm nay, ${timeStr}`;
+  } else if (orderDate.getTime() === yesterday.getTime()) {
+    return `Hôm qua, ${timeStr}`;
+  } else {
+    // Kiểm tra xem có phải trong tuần này không (7 ngày gần nhất)
+    const diffTime = today.getTime() - orderDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays >= 0 && diffDays < 7) {
+      // Trong tuần này, hiển thị thứ
+      const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+      const dayName = dayNames[date.getDay()];
+      return `${dayName}, ${timeStr}`;
+    } else {
+      // Xa hơn, hiển thị ngày đầy đủ
+      return `${date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${timeStr}`;
+    }
+  }
+};
+
+// Helper function để format ngày ngắn gọn (chỉ ngày, không có giây)
+const formatDateShort = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const orderDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  
+  const timeStr = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  
+  if (orderDate.getTime() === today.getTime()) {
+    return `Hôm nay, ${timeStr}`;
+  } else if (orderDate.getTime() === yesterday.getTime()) {
+    return `Hôm qua, ${timeStr}`;
+  } else {
+    const diffTime = today.getTime() - orderDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays >= 0 && diffDays < 7) {
+      const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+      const dayName = dayNames[date.getDay()];
+      return `${dayName}, ${timeStr}`;
+    } else {
+      return `${date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${timeStr}`;
+    }
+  }
+};
+
   // Stats Logic (legacy - for backward compatibility)
   const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
   const revenue = completedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -777,7 +839,7 @@ const parsePrice = (priceString: string): number => {
                       <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 mt-2">
                         <div className="flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" />
-                          <span>{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                          <span>{formatDate(order.timestamp)}</span>
                         </div>
                         {order.status === OrderStatus.COMPLETED && order.paymentMethod && (
                           <div className="flex items-center gap-1">
@@ -1027,7 +1089,7 @@ const parsePrice = (priceString: string): number => {
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1.5 rounded-lg">
                                 <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="font-semibold text-gray-700">{formatDateShort(order.timestamp)}</span>
                               </div>
                               {order.updatedByName && (
                                 <div className="flex items-center gap-1.5 bg-green-50 px-2.5 py-1.5 rounded-lg">
@@ -1157,7 +1219,7 @@ const parsePrice = (priceString: string): number => {
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-lg">
                                 <Clock className="w-3.5 h-3.5 text-red-600" />
-                                <span className="font-semibold text-gray-700">{new Date(order.timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })} - {new Date(order.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="font-semibold text-gray-700">{formatDateShort(order.timestamp)}</span>
                               </div>
                               {order.updatedByName && (
                                 <div className="flex items-center gap-1.5 bg-red-50 px-2.5 py-1.5 rounded-lg">
