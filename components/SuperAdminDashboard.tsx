@@ -1,22 +1,13 @@
 import React, { useState } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power, KeyRound, Edit } from 'lucide-react';
+import { Plus, Store, Power, KeyRound } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
   onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
   onResetRestaurantPassword: (id: string, newPassword: string) => Promise<any>;
-  onUpdateRestaurant: (id: string, payload: {
-    name: string;
-    username: string;
-    ownerName: string;
-    email: string;
-    address: string;
-    phone: string;
-    status: RestaurantStatus;
-  }) => void;
   onLogout: () => void;
 }
 
@@ -25,12 +16,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   onAddRestaurant,
   onToggleActive,
   onResetRestaurantPassword,
-  onUpdateRestaurant,
   onLogout
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const initialForm: NewRestaurantPayload = {
     name: '',
     username: '',
@@ -46,79 +34,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const [isResetLoading, setIsResetLoading] = useState(false);
-  const emptyEditForm = {
-    name: '',
-    username: '',
-    ownerName: '',
-    email: '',
-    address: '',
-    phone: '',
-    status: 'ACTIVE' as RestaurantStatus
-  };
-  const [editForm, setEditForm] = useState<typeof emptyEditForm>(emptyEditForm);
-  const [editTargetId, setEditTargetId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAddRestaurant(newRest);
     setIsModalOpen(false);
     setNewRest(initialForm);
-  };
-
-  const openResetModal = (restaurant: Restaurant) => {
-    setResetTarget({ id: restaurant.id, name: restaurant.name });
-    setResetPassword('');
-    setResetConfirm('');
-    setIsResetModalOpen(true);
-  };
-
-  const handleResetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetTarget) return;
-    if (!resetPassword || !resetConfirm) {
-      alert('Vui lòng nhập đủ mật khẩu mới và xác nhận');
-      return;
-    }
-    if (resetPassword !== resetConfirm) {
-      alert('Mật khẩu xác nhận không khớp');
-      return;
-    }
-    try {
-      setIsResetLoading(true);
-      await onResetRestaurantPassword(resetTarget.id, resetPassword);
-      alert('Đã đặt lại mật khẩu cho nhà hàng');
-      setIsResetModalOpen(false);
-      setResetPassword('');
-      setResetConfirm('');
-      setResetTarget(null);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Không thể đặt lại mật khẩu');
-    } finally {
-      setIsResetLoading(false);
-    }
-  };
-
-  const openEditModal = (restaurant: Restaurant) => {
-    setEditTargetId(restaurant.id);
-    setEditForm({
-      name: restaurant.name,
-      username: restaurant.username,
-      ownerName: restaurant.ownerName,
-      email: restaurant.email,
-      address: restaurant.address,
-      phone: restaurant.phone,
-      status: restaurant.status
-    });
-    setIsEditModalOpen(true);
-  };
-
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editTargetId) return;
-    onUpdateRestaurant(editTargetId, editForm);
-    setIsEditModalOpen(false);
-    setEditTargetId(null);
-    setEditForm(emptyEditForm);
   };
 
   return (
@@ -172,16 +93,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => openEditModal(rest)}
-                      title="Chỉnh sửa thông tin nhà hàng"
-                    >
-                      <Edit className="w-4 h-4 text-blue-500" />
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => openResetModal(rest)}
-                      title="Đặt lại mật khẩu admin"
+                      onClick={() => setResetTarget({ id: rest.id, name: rest.name })}
+                      title="Đặt lại mật khẩu admin nhà hàng"
                     >
                       <KeyRound className="w-4 h-4 text-indigo-500" />
                     </Button>
@@ -292,134 +205,66 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Edit Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold mb-4">Chỉnh sửa thông tin nhà hàng</h3>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tên nhà hàng</label>
-                <input
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.name}
-                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tên người chủ</label>
-                <input
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.ownerName}
-                  onChange={e => setEditForm({ ...editForm, ownerName: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email nhà hàng</label>
-                <input
-                  required
-                  type="email"
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.email}
-                  onChange={e => setEditForm({ ...editForm, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tên đăng nhập (Admin nhà hàng)</label>
-                <input
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.username}
-                  onChange={e => setEditForm({ ...editForm, username: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Địa chỉ nhà hàng</label>
-                <input
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.address}
-                  onChange={e => setEditForm({ ...editForm, address: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Số điện thoại liên hệ</label>
-                <input
-                  required
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.phone}
-                  onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Trạng thái nhà hàng</label>
-                <select
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                  value={editForm.status}
-                  onChange={e => setEditForm({ ...editForm, status: e.target.value as RestaurantStatus })}
-                >
-                  <option value="ACTIVE">Đang hoạt động</option>
-                  <option value="INACTIVE">Tạm khóa</option>
-                </select>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setIsEditModalOpen(false);
-                    setEditTargetId(null);
-                  }}
-                  type="button"
-                >
-                  Hủy
-                </Button>
-                <Button type="submit">Lưu thay đổi</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Reset Password Modal */}
-      {isResetModalOpen && resetTarget && (
+      {resetTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold mb-4">
-              Đặt lại mật khẩu cho <span className="text-brand-600">{resetTarget.name}</span>
+              Đặt lại mật khẩu - {resetTarget.name}
             </h3>
-            <form onSubmit={handleResetSubmit} className="space-y-4">
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!resetPassword || !resetConfirm) {
+                  alert('Vui lòng nhập đủ mật khẩu mới và xác nhận');
+                  return;
+                }
+                if (resetPassword !== resetConfirm) {
+                  alert('Mật khẩu xác nhận không khớp');
+                  return;
+                }
+                try {
+                  setIsResetLoading(true);
+                  await onResetRestaurantPassword(resetTarget.id, resetPassword);
+                  alert('Đã đặt lại mật khẩu cho nhà hàng');
+                  setResetPassword('');
+                  setResetConfirm('');
+                  setResetTarget(null);
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Không thể đặt lại mật khẩu');
+                } finally {
+                  setIsResetLoading(false);
+                }
+              }}
+            >
               <div>
                 <label className="block text-sm font-medium text-gray-700">Mật khẩu mới</label>
                 <input
-                  required
                   type="password"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
                   value={resetPassword}
-                  onChange={e => setResetPassword(e.target.value)}
+                  onChange={(e) => setResetPassword(e.target.value)}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Xác nhận mật khẩu mới</label>
                 <input
-                  required
                   type="password"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
                   value={resetConfirm}
-                  onChange={e => setResetConfirm(e.target.value)}
+                  onChange={(e) => setResetConfirm(e.target.value)}
                 />
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <Button
                   variant="secondary"
+                  type="button"
                   onClick={() => {
-                    setIsResetModalOpen(false);
                     setResetTarget(null);
                     setResetPassword('');
                     setResetConfirm('');
                   }}
-                  type="button"
                 >
                   Hủy
                 </Button>

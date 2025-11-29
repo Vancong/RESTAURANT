@@ -5,7 +5,7 @@ import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { CustomerView } from './components/CustomerView';
-import { ResetPassword } from './components/ResetPassword';
+import { StaffDashboard } from './components/StaffDashboard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -21,8 +21,6 @@ const App: React.FC = () => {
   const [currentRestaurantId, setCurrentRestaurantId] = useState<string | null>(null);
   const [customerTable, setCustomerTable] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string>('');
-  const [resetToken, setResetToken] = useState<string | null>(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   // Khôi phục trạng thái đăng nhập từ JWT trong localStorage (nếu có)
   useEffect(() => {
@@ -43,6 +41,9 @@ const App: React.FC = () => {
       } else if (payload.role === Role.RESTAURANT_ADMIN && payload.restaurantId) {
         setRole(Role.RESTAURANT_ADMIN);
         setCurrentRestaurantId(payload.restaurantId);
+      } else if (payload.role === Role.STAFF && payload.restaurantId) {
+        setRole(Role.STAFF);
+        setCurrentRestaurantId(payload.restaurantId);
       } else {
         // Token không hợp lệ cho app này
         localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -56,19 +57,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-
-      if (hash.startsWith('#/reset-password')) {
-        const params = new URLSearchParams(hash.split('?')[1]);
-        const token = params.get('token');
-        setResetToken(token || '');
-        setRole(Role.GUEST);
-        setCurrentRestaurantId(null);
-        setCustomerTable(null);
-        return;
-      } else {
-        setResetToken(null);
-      }
-
       if (hash.startsWith('#/order')) {
         const params = new URLSearchParams(hash.split('?')[1]);
         const rId = params.get('r');
@@ -81,8 +69,8 @@ const App: React.FC = () => {
       } else {
         // Default to login if not customer flow
         if (role === Role.CUSTOMER) {
-          setRole(Role.GUEST);
-          setCurrentRestaurantId(null);
+             setRole(Role.GUEST);
+             setCurrentRestaurantId(null);
         }
       }
     };
@@ -91,53 +79,6 @@ const App: React.FC = () => {
     handleHashChange(); // Check on load
 
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  useEffect(() => {
-    const bootstrapAuth = async () => {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      if (!token) {
-        setIsBootstrapping(false);
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
-        if (!res.ok) {
-          throw new Error('Token không hợp lệ');
-        }
-        const data: {
-          user: {
-            role: Role;
-            restaurantId: string | null;
-          };
-        } = await res.json();
-
-        if (data.user.role === Role.SUPER_ADMIN) {
-          setRole(Role.SUPER_ADMIN);
-          setCurrentRestaurantId(null);
-        } else if (data.user.role === Role.RESTAURANT_ADMIN && data.user.restaurantId) {
-          setRole(Role.RESTAURANT_ADMIN);
-          setCurrentRestaurantId(data.user.restaurantId);
-        } else {
-          throw new Error('Không xác định được quyền truy cập.');
-        }
-        setLoginError('');
-      } catch {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        setRole(Role.GUEST);
-        setCurrentRestaurantId(null);
-      } finally {
-        setIsBootstrapping(false);
-      }
-    };
-
-    bootstrapAuth();
   }, []);
 
   // Load restaurants from backend
@@ -177,11 +118,6 @@ const App: React.FC = () => {
     fetchRestaurants();
   }, []);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   // Load menu items when restaurant context changes (restaurant admin hoặc customer)
   useEffect(() => {
     if (!currentRestaurantId) {
@@ -194,7 +130,7 @@ const App: React.FC = () => {
         const res = await fetch(`${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}`);
         if (!res.ok) {
           setMenuItems([]);
-          return;
+        return;
         }
         const data: {
           _id: string;
@@ -226,13 +162,50 @@ const App: React.FC = () => {
     fetchMenu();
   }, [currentRestaurantId]);
 
+  // Fetch orders for restaurant admin and staff
+  useEffect(() => {
+    if ((role !== Role.RESTAURANT_ADMIN && role !== Role.STAFF) || !currentRestaurantId) {
+      return;
+    }
+
+    const fetchOrders = async () => {
+      try {
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        if (!token) return;
+        const res = await fetch(`${API_BASE_URL}/api/staff/orders`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: Order[] = data.map((o: any) => ({
+          id: o._id,
+          restaurantId: o.restaurantId,
+          tableNumber: o.tableNumber,
+          items: o.items,
+          totalAmount: o.totalAmount,
+          status: o.status as OrderStatus,
+          timestamp: new Date(o.createdAt).getTime(),
+          note: o.note
+        }));
+        setOrders(mapped);
+      } catch (e) {
+        console.error('Không thể tải đơn hàng', e);
+      }
+    };
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000); // Refresh mỗi 5 giây
+    return () => clearInterval(interval);
+  }, [role, currentRestaurantId]);
+
   // Actions
-  const handleLogin = async (identifier: string, password: string) => {
+  const handleLogin = async (username: string, password: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password })
+        body: JSON.stringify({ username, password })
       });
 
       if (!response.ok) {
@@ -254,7 +227,10 @@ const App: React.FC = () => {
         setRole(Role.SUPER_ADMIN);
         setCurrentRestaurantId(null);
       } else if (data.user.role === Role.RESTAURANT_ADMIN && data.user.restaurantId) {
-        setRole(Role.RESTAURANT_ADMIN);
+      setRole(Role.RESTAURANT_ADMIN);
+        setCurrentRestaurantId(data.user.restaurantId);
+      } else if (data.user.role === Role.STAFF && data.user.restaurantId) {
+        setRole(Role.STAFF);
         setCurrentRestaurantId(data.user.restaurantId);
       } else {
         throw new Error('Không xác định được quyền truy cập.');
@@ -281,10 +257,7 @@ const App: React.FC = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/restaurants`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: data.name,
           username: data.username,
@@ -332,59 +305,6 @@ const App: React.FC = () => {
     }
   };
 
-  const updateRestaurantDetails = async (
-    id: string,
-    payload: Partial<Omit<Restaurant, 'id' | 'active'>> & { status?: RestaurantStatus; active?: boolean }
-  ) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.message || 'Không thể cập nhật thông tin nhà hàng');
-      }
-      const updated: {
-        _id: string;
-        name: string;
-        username: string;
-        ownerName: string;
-        email: string;
-        address: string;
-        phone: string;
-        status: RestaurantStatus;
-        active: boolean;
-      } = await res.json();
-
-      setRestaurants(prev =>
-        prev.map(r =>
-          r.id === id
-            ? {
-                ...r,
-                name: updated.name,
-                username: updated.username,
-                ownerName: updated.ownerName,
-                email: updated.email,
-                address: updated.address,
-                phone: updated.phone,
-                status: updated.status,
-                active: updated.active
-              }
-            : r
-        )
-      );
-      alert('Đã cập nhật thông tin nhà hàng.');
-    } catch (error) {
-      console.error(error);
-      alert(error instanceof Error ? error.message : 'Không thể cập nhật nhà hàng');
-    }
-  };
-
   const toggleRestaurantStatus = async (id: string) => {
     try {
       const current = restaurants.find(r => r.id === id);
@@ -392,10 +312,7 @@ const App: React.FC = () => {
       const nextStatus = !current.active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
       const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !current.active, status: nextStatus })
       });
       if (!res.ok) throw new Error('Không thể cập nhật trạng thái nhà hàng');
@@ -430,58 +347,6 @@ const App: React.FC = () => {
     } catch (e) {
       console.error(e);
       alert(e instanceof Error ? e.message : 'Không thể cập nhật trạng thái nhà hàng');
-    }
-  };
-
-  const resetRestaurantPassword = async (restaurantId: string, newPassword: string) => {
-    try {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      if (!token) {
-        throw new Error('Vui lòng đăng nhập lại để thao tác.');
-      }
-      const res = await fetch(`${API_BASE_URL}/api/restaurants/${restaurantId}/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ newPassword })
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(body?.message || 'Không thể đặt lại mật khẩu');
-      }
-      return body;
-    } catch (e) {
-      console.error(e);
-      throw e;
-    }
-  };
-
-  const requestPasswordReset = async (email: string) => {
-    const res = await fetch(`${API_BASE_URL}/api/auth/request-password-reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || 'Không thể gửi email đặt lại mật khẩu');
-    }
-  };
-
-  const changeOwnPassword = async (oldPassword: string, newPassword: string) => {
-    const res = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders()
-      },
-      body: JSON.stringify({ oldPassword, newPassword })
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || 'Không thể đổi mật khẩu');
     }
   };
 
@@ -537,7 +402,6 @@ const App: React.FC = () => {
       console.error(err);
       throw err;
     }
->>>>>>> 7da6fa164feb9be47b98e8bcd5f021aa8ec84cf9
   };
 
   const deleteMenuItem = async (id: string) => {
@@ -596,45 +460,74 @@ const App: React.FC = () => {
     }
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
+  const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/staff/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể cập nhật đơn hàng');
+      }
+      const updated = await res.json();
+      setOrders(orders.map(o => 
+        o.id === orderId 
+          ? { 
+              ...o, 
+              status: updated.status as OrderStatus 
+            } 
+          : o
+      ));
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Không thể cập nhật đơn hàng');
+    }
   };
 
-  const placeOrder = (items: CartItem[], note: string) => {
+  const placeOrder = async (items: CartItem[], note: string) => {
     if (!currentRestaurantId || !customerTable) return;
     
-    const newOrder: Order = {
-      id: `order_${Date.now()}`,
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
       restaurantId: currentRestaurantId,
       tableNumber: customerTable,
       items,
-      totalAmount: items.reduce((sum, i) => sum + (i.price * i.quantity), 0),
-      status: OrderStatus.PENDING,
-      timestamp: Date.now(),
-      note
-    };
-    setOrders([...orders, newOrder]);
+          note
+        })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể đặt món');
+      }
+      const created = await res.json();
+      const newOrder: Order = {
+        id: created._id,
+        restaurantId: created.restaurantId,
+        tableNumber: created.tableNumber,
+        items: created.items,
+        totalAmount: created.totalAmount,
+        status: created.status as OrderStatus,
+        timestamp: new Date(created.createdAt).getTime(),
+        note: created.note
+      };
+      setOrders(prev => [newOrder, ...prev]);
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
   };
-
-  if (resetToken !== null) {
-    return (
-      <ResetPassword
-        initialToken={resetToken}
-        onSuccess={() => {
-          setResetToken(null);
-          window.location.hash = '';
-        }}
-        onBack={() => {
-          setResetToken(null);
-          window.location.hash = '';
-        }}
-      />
-    );
-  }
-
-  if (isBootstrapping) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Đang tải...</div>;
-  }
 
   // Render Logic
   if (role === Role.CUSTOMER && currentRestaurantId) {
@@ -655,6 +548,30 @@ const App: React.FC = () => {
     );
   }
 
+  const resetRestaurantPassword = async (restaurantId: string, newPassword: string) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại để thao tác.');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${restaurantId}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ newPassword })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể đặt lại mật khẩu');
+      }
+      return body;
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
   if (role === Role.SUPER_ADMIN) {
     return (
       <SuperAdminDashboard 
@@ -662,7 +579,6 @@ const App: React.FC = () => {
         onAddRestaurant={addRestaurant}
         onToggleActive={toggleRestaurantStatus}
         onResetRestaurantPassword={resetRestaurantPassword}
-        onUpdateRestaurant={updateRestaurantDetails}
         onLogout={handleLogout}
       />
     );
@@ -684,13 +600,25 @@ const App: React.FC = () => {
         onUpdateMenuItem={updateMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
         onDeleteMenuItem={deleteMenuItem}
-        onChangePassword={changeOwnPassword}
         onLogout={handleLogout}
       />
     );
   }
 
-  return <Login onLogin={handleLogin} error={loginError} onRequestPasswordReset={requestPasswordReset} />;
+  if (role === Role.STAFF && currentRestaurantId) {
+    const rest = restaurants.find(r => r.id === currentRestaurantId);
+    if (!rest) return <div>Lỗi dữ liệu</div>;
+
+    return (
+      <StaffDashboard
+        restaurantId={currentRestaurantId}
+        restaurantName={rest.name}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  return <Login onLogin={handleLogin} error={loginError} />;
 };
 
 export default App;

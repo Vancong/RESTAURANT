@@ -1,6 +1,7 @@
 export enum Role {
   SUPER_ADMIN = 'SUPER_ADMIN',
   RESTAURANT_ADMIN = 'RESTAURANT_ADMIN',
+  STAFF = 'STAFF',
   CUSTOMER = 'CUSTOMER',
   GUEST = 'GUEST' // Not logged in yet
 }
