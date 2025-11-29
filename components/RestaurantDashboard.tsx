@@ -3,7 +3,7 @@ import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod } from '../type
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -919,7 +919,12 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                {/* Danh sách món */}
                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {menu.map(item => (
-                    <div key={item.id} className="bg-white border rounded-lg p-4 flex flex-col relative group">
+                    <div key={item.id} className={`bg-white border rounded-lg p-4 flex flex-col relative group ${!item.available ? 'opacity-60 border-red-200 bg-red-50' : ''}`}>
+                        {!item.available && (
+                          <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-10">
+                            Hết món
+                          </div>
+                        )}
                         <img src={item.imageUrl} alt={item.name} className="w-full h-32 object-cover rounded-md mb-3 bg-gray-100" />
                         <h4 className="font-bold text-gray-900 line-clamp-1">{item.name}</h4>
                         <p className="text-sm text-gray-500 mb-2">{item.price.toLocaleString('vi-VN')}đ</p>
@@ -928,9 +933,20 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           <Button 
                             variant="secondary" 
                             size="sm"
+                            onClick={() => {
+                              const newAvailable = !item.available;
+                              onUpdateMenuItem(item.id, { available: newAvailable });
+                            }}
+                            title={item.available ? "Ẩn món (hết hàng)" : "Hiện món (còn hàng)"}
+                          >
+                            {item.available ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </Button>
+                          <Button 
+                            variant="secondary" 
+                            size="sm"
                             onClick={() => setEditingItem(item)}
                           >
-                            Sửa
+                            <Edit className="w-4 h-4" />
                           </Button>
                           <Button 
                             variant="danger" 
@@ -941,8 +957,19 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                             <Trash className="w-4 h-4" />
                           </Button>
                         </div>
-                        <div className="mt-auto">
+                        <div className="mt-auto flex items-center justify-between">
                            <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{item.category}</span>
+                           {item.available ? (
+                             <span className="inline-flex items-center text-xs text-green-600 font-medium">
+                               <CheckCircle className="w-3 h-3 mr-1" />
+                               Còn hàng
+                             </span>
+                           ) : (
+                             <span className="inline-flex items-center text-xs text-red-600 font-medium">
+                               <XCircle className="w-3 h-3 mr-1" />
+                               Hết hàng
+                             </span>
+                           )}
                         </div>
                     </div>
                 ))}

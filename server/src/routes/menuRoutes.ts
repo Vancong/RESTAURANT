@@ -8,7 +8,10 @@ const router = Router();
 
 // Public: lấy menu theo restaurantId (bắt buộc)
 router.get("/", async (req, res) => {
-  const { restaurantId } = req.query as { restaurantId?: string };
+  const { restaurantId, includeUnavailable } = req.query as { 
+    restaurantId?: string; 
+    includeUnavailable?: string;
+  };
 
   if (!restaurantId) {
     return res.status(400).json({ message: "Thiếu restaurantId" });
@@ -20,7 +23,16 @@ router.get("/", async (req, res) => {
       .json({ message: "restaurantId không hợp lệ", restaurantId });
   }
 
-  const items = await MenuItem.find({ restaurantId }).sort({ createdAt: -1 });
+  // Build query filter
+  const filter: any = { restaurantId };
+  
+  // Nếu không có includeUnavailable hoặc là false, chỉ lấy món available
+  // (Mặc định cho khách hàng chỉ thấy món available)
+  if (!includeUnavailable || includeUnavailable !== 'true') {
+    filter.available = true;
+  }
+
+  const items = await MenuItem.find(filter).sort({ createdAt: -1 });
   res.json(items);
 });
 

@@ -31,9 +31,11 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
     return ['ALL', ...Array.from(cats)];
   }, [menu]);
 
+  // Filter menu: chỉ hiển thị món available và theo category
+  const availableMenu = menu.filter(item => item.available);
   const filteredMenu = activeCategory === 'ALL' 
-    ? menu 
-    : menu.filter(item => item.category === activeCategory);
+    ? availableMenu 
+    : availableMenu.filter(item => item.category === activeCategory);
 
   const addToCart = (item: MenuItem) => {
     setCart(prev => {

@@ -147,11 +147,14 @@ const App: React.FC = () => {
 
     const fetchMenu = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}`);
+        // Admin xem tất cả món (kể cả món hết), khách hàng chỉ thấy món available
+        const includeUnavailable = role === Role.RESTAURANT_ADMIN || role === Role.STAFF || role === Role.SUPER_ADMIN;
+        const url = `${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}${includeUnavailable ? '&includeUnavailable=true' : ''}`;
+        const res = await fetch(url);
         if (!res.ok) {
           setMenuItems([]);
-      return;
-    }
+          return;
+        }
         const data: {
           _id: string;
           restaurantId: string;
