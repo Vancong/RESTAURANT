@@ -25,6 +25,7 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
   const [orderNote, setOrderNote] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [chefSuggestion, setChefSuggestion] = useState<string>('');
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   const categories = useMemo(() => {
     const cats = new Set(menu.map(item => item.category));
@@ -81,16 +82,24 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
       alert('Vui lòng nhập tên của bạn');
       return;
     }
+    if (isPlacingOrder) {
+      return; // Prevent spam clicking
+    }
     try {
+      setIsPlacingOrder(true);
       await onPlaceOrder(cart, orderNote, customerName.trim());
       setCart([]);
       setOrderNote('');
       setCustomerName('');
       setIsCartOpen(false);
       setChefSuggestion('');
-      alert("Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.");
+      alert("✅ Đã gửi đơn hàng thành công! Bếp đang chuẩn bị.");
     } catch (err) {
-      // Lỗi đã được xử lý trong onPlaceOrder, không cần làm gì thêm
+      // Hiển thị alert cho mọi lỗi
+      const errorMessage = err instanceof Error ? err.message : 'Không thể đặt món. Vui lòng thử lại.';
+      alert(errorMessage);
+    } finally {
+      setIsPlacingOrder(false);
     }
   };
 
@@ -458,10 +467,21 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
               </div>
               <Button 
                 onClick={handleCheckout} 
-                className="w-full py-3 text-base font-bold bg-[#F97316] hover:bg-[#EA580C]" 
+                className="w-full py-3 text-base font-bold bg-[#F97316] hover:bg-[#EA580C] disabled:opacity-50 disabled:cursor-not-allowed" 
                 size="lg"
+                disabled={isPlacingOrder || cart.length === 0}
               >
-                Xác nhận đặt món
+                {isPlacingOrder ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Đang xử lý...
+                  </span>
+                ) : (
+                  'Xác nhận đặt món'
+                )}
               </Button>
             </div>
           </div>

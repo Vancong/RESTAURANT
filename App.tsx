@@ -632,7 +632,7 @@ const App: React.FC = () => {
     }
   };
 
-  const updateRestaurant = async (data: Partial<Restaurant> & { emailChangeOtp?: string }) => {
+  const updateRestaurant = async (data: Partial<Restaurant> & { emailChangeOtp?: string; bankChangeOtp?: string }) => {
     try {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
@@ -650,12 +650,10 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
-
-
           emailChangeOtp: data.emailChangeOtp,
           bankAccount: data.bankAccount,
-          bankName: data.bankName
-
+          bankName: data.bankName,
+          bankChangeOtp: data.bankChangeOtp
         })
       });
       const body = await res.json().catch(() => null);

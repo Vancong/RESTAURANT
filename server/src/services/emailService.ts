@@ -310,3 +310,71 @@ export const sendNewOrderNotification = async ({
   });
 };
 
+export interface BankAccountChangeMailParams {
+  to: string;
+  restaurantName: string;
+  ownerName?: string;
+  otp: string;
+  newBankAccount: string;
+  newBankName: string;
+}
+
+export const sendBankAccountChangeOTP = async ({
+  to,
+  restaurantName,
+  ownerName,
+  otp,
+  newBankAccount,
+  newBankName
+}: BankAccountChangeMailParams) => {
+  if (!SMTP_HOST) {
+    throw new Error("SMTP_HOST chưa được cấu hình");
+  }
+
+  const from = MAIL_FROM || SMTP_USER || "no-reply@example.com";
+  const greeting = ownerName ? `Anh/chị ${ownerName}` : restaurantName;
+
+  const text = [
+    `Xin chào ${greeting},`,
+    "",
+    "Hệ thống nhận được yêu cầu đổi tài khoản ngân hàng cho nhà hàng của bạn.",
+    "",
+    "Thông tin tài khoản ngân hàng mới:",
+    `- Tên ngân hàng: ${newBankName}`,
+    `- Số tài khoản: ${newBankAccount}`,
+    "",
+    "Vui lòng sử dụng mã OTP dưới đây để xác thực đổi tài khoản ngân hàng:",
+    `Mã OTP: ${otp}`,
+    "",
+    "Lưu ý: mã OTP chỉ có hiệu lực trong 15 phút.",
+    "",
+    "Nếu bạn không yêu cầu đổi tài khoản ngân hàng, vui lòng bỏ qua email này và liên hệ với quản trị viên."
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <p>Xin chào <strong>${greeting}</strong>,</p>
+      <p>Hệ thống nhận được yêu cầu đổi tài khoản ngân hàng cho nhà hàng của bạn.</p>
+      <div style="background-color: #f9fafb; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p><strong>Thông tin tài khoản ngân hàng mới:</strong></p>
+        <ul style="margin: 8px 0; padding-left: 20px;">
+          <li><strong>Tên ngân hàng:</strong> ${newBankName}</li>
+          <li><strong>Số tài khoản:</strong> ${newBankAccount}</li>
+        </ul>
+      </div>
+      <p>Vui lòng sử dụng mã OTP dưới đây để xác thực đổi tài khoản ngân hàng:</p>
+      <p style="font-size: 20px; font-weight: bold; letter-spacing: 4px; color: #ea580c;">${otp}</p>
+      <p><em>Mã OTP chỉ có hiệu lực trong 15 phút.</em></p>
+      <p>Nếu bạn không yêu cầu đổi tài khoản ngân hàng, vui lòng bỏ qua email này và liên hệ với quản trị viên.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Xác thực đổi tài khoản ngân hàng nhà hàng",
+    text,
+    html
+  });
+};
+

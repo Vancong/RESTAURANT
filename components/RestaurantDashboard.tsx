@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStats, StatsPeriod } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
+import { ToastContainer, ToastNotification } from './Toast';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users as UsersIcon, XCircle as XCircleIcon, Activity, Award, Zap, Tag, FolderOpen, FileText, Image, Upload, Loader2 } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard, User, Receipt, AlertCircle, CheckCircle2, XCircle, Timer, Eye, EyeOff, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users as UsersIcon, XCircle as XCircleIcon, Activity, Award, Zap, Tag, FolderOpen, FileText, Image, Upload, Loader2, Menu } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -80,6 +81,21 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [bankAccountInput, setBankAccountInput] = useState(restaurant.bankAccount || '');
   const [bankNameInput, setBankNameInput] = useState(restaurant.bankName || '');
   const [isSavingBank, setIsSavingBank] = useState(false);
+  const [bankChangeOtp, setBankChangeOtp] = useState('');
+  const [isSendingBankOtp, setIsSendingBankOtp] = useState(false);
+  const [bankOtpSent, setBankOtpSent] = useState(false);
+
+  // Notification state
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    type: 'success' | 'info' | 'warning' | 'error';
+    title: string;
+    message: string;
+    timestamp: number;
+  }>>([]);
+  const [notifiedOrderIds, setNotifiedOrderIds] = useState<Set<string>>(new Set());
+  const [notifiedStaffIds, setNotifiedStaffIds] = useState<Set<string>>(new Set());
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Stats state
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('today');
@@ -140,6 +156,8 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     }
     setBankAccountInput(restaurant.bankAccount || '');
     setBankNameInput(restaurant.bankName || '');
+    setBankChangeOtp('');
+    setBankOtpSent(false);
   }, [restaurant, isEditingRestaurant]);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -509,6 +527,113 @@ const formatDateShort = (timestamp: number): string => {
     }
   }, [activeTab, restaurant.id]);
 
+  // Notification logic
+  const addNotification = (type: 'success' | 'info' | 'warning' | 'error', title: string, message: string) => {
+    const notification: ToastNotification = {
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      title,
+      message,
+      timestamp: Date.now()
+    };
+    setNotifications(prev => [...prev, notification]);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Track orders for notifications
+  const previousOrdersRef = useRef<Order[]>([]);
+  
+  useEffect(() => {
+    // Check for new orders
+    const previousOrderIds = new Set(previousOrdersRef.current.map(o => o.id));
+    const newOrders = orders.filter(o => !previousOrderIds.has(o.id));
+    
+    newOrders.forEach(order => {
+      if (!notifiedOrderIds.has(order.id)) {
+        if (order.status === OrderStatus.PENDING) {
+          addNotification(
+            'info',
+            '🔔 Đơn hàng mới',
+            `Bàn ${order.tableNumber} - ${order.totalAmount.toLocaleString('vi-VN')}đ${order.customerName ? ` - ${order.customerName}` : ''}`
+          );
+          setNotifiedOrderIds(prev => new Set([...prev, order.id]));
+        } else if (order.status === OrderStatus.CANCELLED) {
+          addNotification(
+            'error',
+            '❌ Đơn hàng bị hủy',
+            `Bàn ${order.tableNumber} đã bị hủy${order.customerName ? ` - ${order.customerName}` : ''}`
+          );
+          setNotifiedOrderIds(prev => new Set([...prev, order.id]));
+        }
+      }
+    });
+
+    // Check for order status changes
+    previousOrdersRef.current.forEach(prevOrder => {
+      const currentOrder = orders.find(o => o.id === prevOrder.id);
+      if (currentOrder && currentOrder.status !== prevOrder.status) {
+        if (currentOrder.status === OrderStatus.CANCELLED && !notifiedOrderIds.has(`cancelled-${currentOrder.id}`)) {
+          addNotification(
+            'error',
+            '❌ Đơn hàng bị hủy',
+            `Bàn ${currentOrder.tableNumber} đã bị hủy${currentOrder.customerName ? ` - ${currentOrder.customerName}` : ''}`
+          );
+          setNotifiedOrderIds(prev => new Set([...prev, `cancelled-${currentOrder.id}`]));
+        } else if (currentOrder.status === OrderStatus.COMPLETED && prevOrder.status !== OrderStatus.COMPLETED) {
+          addNotification(
+            'success',
+            '✅ Đơn hàng hoàn thành',
+            `Bàn ${currentOrder.tableNumber} đã hoàn thành - ${currentOrder.totalAmount.toLocaleString('vi-VN')}đ`
+          );
+        }
+      }
+    });
+
+    // Check for long pending orders (> 10 minutes)
+    const now = Date.now();
+    orders.forEach(order => {
+      if (order.status === OrderStatus.PENDING) {
+        const orderAge = now - order.timestamp;
+        const tenMinutes = 10 * 60 * 1000;
+        if (orderAge > tenMinutes && !notifiedOrderIds.has(`long-pending-${order.id}`)) {
+          const minutes = Math.floor(orderAge / 60000);
+          addNotification(
+            'warning',
+            '⏰ Đơn hàng chờ lâu',
+            `Bàn ${order.tableNumber} đã chờ ${minutes} phút - Cần xử lý ngay!`
+          );
+          setNotifiedOrderIds(prev => new Set([...prev, `long-pending-${order.id}`]));
+        }
+      }
+    });
+
+    previousOrdersRef.current = orders;
+  }, [orders, notifiedOrderIds]);
+
+  // Track staff for notifications
+  const previousStaffRef = useRef<typeof staffList>([]);
+  
+  useEffect(() => {
+    const previousStaffIds = new Set(previousStaffRef.current.map(s => s.id));
+    const newStaff = staffList.filter(s => !previousStaffIds.has(s.id));
+    
+    newStaff.forEach(staff => {
+      if (!notifiedStaffIds.has(staff.id)) {
+        addNotification(
+          'success',
+          '👤 Nhân viên mới',
+          `Đã tạo tài khoản nhân viên: ${staff.name || staff.username}`
+        );
+        setNotifiedStaffIds(prev => new Set([...prev, staff.id]));
+      }
+    });
+
+    previousStaffRef.current = staffList;
+  }, [staffList, notifiedStaffIds]);
+
   const CategoryCreator: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
@@ -673,16 +798,44 @@ const formatDateShort = (timestamp: number): string => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/20 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/20 flex flex-col md:flex-row relative">
+      <ToastContainer notifications={notifications} onClose={removeNotification} />
+      
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(prev => !prev)}
+        className="md:hidden fixed top-4 left-4 z-50 bg-white rounded-lg p-2 shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+        aria-label={isMobileMenuOpen ? "Đóng menu" : "Mở menu"}
+      >
+        {isMobileMenuOpen ? (
+          <X className="w-6 h-6 text-gray-700" />
+        ) : (
+          <Menu className="w-6 h-6 text-gray-700" />
+        )}
+      </button>
+
+      {/* Overlay for mobile menu */}
+      {isMobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="bg-gradient-to-b from-white to-orange-50/50 w-full md:w-72 border-r border-orange-100 flex-shrink-0 shadow-lg">
+      <aside className={`bg-gradient-to-b from-white to-orange-50/50 w-full md:w-72 border-r border-orange-100 flex-shrink-0 shadow-lg fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
         <div className="p-6 border-b border-orange-100 bg-gradient-to-r from-brand-600 to-brand-700">
           <h2 className="text-2xl font-bold text-white truncate drop-shadow-md">{restaurant.name}</h2>
           <p className="text-xs text-orange-100 mt-1 font-medium">Quản lý nhà hàng</p>
         </div>
-        <nav className="p-4 space-y-2">
+        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-120px)]">
           <button 
-            onClick={() => setActiveTab('orders')}
+            onClick={() => {
+              setActiveTab('orders');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'orders' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -692,7 +845,10 @@ const formatDateShort = (timestamp: number): string => {
             <Clock className={`w-5 h-5 mr-3 ${activeTab === 'orders' ? 'text-white' : 'text-brand-600'}`} /> Đơn hàng
           </button>
           <button 
-            onClick={() => setActiveTab('menu')}
+            onClick={() => {
+              setActiveTab('menu');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'menu' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -702,7 +858,10 @@ const formatDateShort = (timestamp: number): string => {
             <UtensilsCrossed className={`w-5 h-5 mr-3 ${activeTab === 'menu' ? 'text-white' : 'text-brand-600'}`} /> Thực đơn
           </button>
           <button 
-            onClick={() => setActiveTab('stats')}
+            onClick={() => {
+              setActiveTab('stats');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'stats' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -712,7 +871,10 @@ const formatDateShort = (timestamp: number): string => {
             <LayoutDashboard className={`w-5 h-5 mr-3 ${activeTab === 'stats' ? 'text-white' : 'text-brand-600'}`} /> Thống kê
           </button>
           <button 
-            onClick={() => setActiveTab('qr')}
+            onClick={() => {
+              setActiveTab('qr');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'qr' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -722,7 +884,10 @@ const formatDateShort = (timestamp: number): string => {
             <QrCode className={`w-5 h-5 mr-3 ${activeTab === 'qr' ? 'text-white' : 'text-brand-600'}`} /> Mã QR
           </button>
           <button 
-            onClick={() => setActiveTab('staff')}
+            onClick={() => {
+              setActiveTab('staff');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'staff' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -732,7 +897,10 @@ const formatDateShort = (timestamp: number): string => {
             <Users className={`w-5 h-5 mr-3 ${activeTab === 'staff' ? 'text-white' : 'text-brand-600'}`} /> Nhân viên
           </button>
           <button 
-            onClick={() => setActiveTab('bank')}
+            onClick={() => {
+              setActiveTab('bank');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'bank' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -742,7 +910,10 @@ const formatDateShort = (timestamp: number): string => {
             <CreditCard className={`w-5 h-5 mr-3 ${activeTab === 'bank' ? 'text-white' : 'text-brand-600'}`} /> Ngân hàng
           </button>
           <button 
-            onClick={() => setActiveTab('settings')}
+            onClick={() => {
+              setActiveTab('settings');
+              setIsMobileMenuOpen(false);
+            }}
             className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
               activeTab === 'settings' 
                 ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-200 scale-105' 
@@ -753,13 +924,19 @@ const formatDateShort = (timestamp: number): string => {
           </button>
           <div className="pt-4 mt-4 border-t border-orange-200 space-y-2">
             <button
-              onClick={() => setIsChangePwOpen(true)}
+              onClick={() => {
+                setIsChangePwOpen(true);
+                setIsMobileMenuOpen(false);
+              }}
               className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:shadow-md rounded-xl transition-all duration-200"
             >
               <Lock className="w-5 h-5 mr-3 text-gray-500" /> Đổi mật khẩu
             </button>
             <button
-              onClick={onLogout}
+              onClick={() => {
+                onLogout();
+                setIsMobileMenuOpen(false);
+              }}
               className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:shadow-md rounded-xl transition-all duration-200"
             >
               <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
@@ -769,7 +946,7 @@ const formatDateShort = (timestamp: number): string => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto pt-16 md:pt-4">
         
         {/* ORDERS TAB */}
         {activeTab === 'orders' && (() => {
@@ -2315,16 +2492,140 @@ const formatDateShort = (timestamp: number): string => {
                   </div>
                 )}
 
+                {/* OTP Section - Hiển thị khi thay đổi bank account */}
+                {(bankAccountInput.trim() !== (restaurant.bankAccount || '').trim() || 
+                  bankNameInput.trim() !== (restaurant.bankName || '').trim()) && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm font-semibold text-yellow-900 mb-2">
+                      ⚠️ Bạn đang thay đổi tài khoản ngân hàng. Cần xác thực bằng mã OTP.
+                    </p>
+                    {!bankOtpSent ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={async () => {
+                          try {
+                            if (!bankAccountInput.trim() || !bankNameInput.trim()) {
+                              alert('Vui lòng nhập đầy đủ thông tin tài khoản ngân hàng');
+                              return;
+                            }
+                            setIsSendingBankOtp(true);
+                            const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                            if (!token) {
+                              throw new Error('Vui lòng đăng nhập lại');
+                            }
+                            const res = await fetch(`${API_BASE_URL}/api/restaurants/me/request-bank-change`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`
+                              },
+                              body: JSON.stringify({ 
+                                newBankAccount: bankAccountInput.trim(),
+                                newBankName: bankNameInput.trim()
+                              })
+                            });
+                            const body = await res.json().catch(() => null);
+                            if (!res.ok) {
+                              throw new Error(body?.message || 'Không thể gửi mã OTP');
+                            }
+                            setBankOtpSent(true);
+                            alert('Đã gửi mã OTP đến email hiện tại của nhà hàng. Vui lòng kiểm tra hộp thư.');
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Không thể gửi mã OTP');
+                          } finally {
+                            setIsSendingBankOtp(false);
+                          }
+                        }}
+                        disabled={isSendingBankOtp || !bankAccountInput.trim() || !bankNameInput.trim()}
+                      >
+                        {isSendingBankOtp ? 'Đang gửi...' : 'Gửi mã OTP xác thực'}
+                      </Button>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600">
+                          Mã OTP đã được gửi đến email hiện tại: <strong>{restaurant.email}</strong>
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="Nhập mã OTP 6 chữ số"
+                          maxLength={6}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-center text-lg tracking-widest"
+                          value={bankChangeOtp}
+                          onChange={(e) => setBankChangeOtp(e.target.value.replace(/\D/g, ''))}
+                        />
+                        <button
+                          type="button"
+                          className="text-xs text-brand-600 hover:text-brand-700"
+                          onClick={async () => {
+                            try {
+                              setIsSendingBankOtp(true);
+                              const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                              if (!token) {
+                                throw new Error('Vui lòng đăng nhập lại');
+                              }
+                              const res = await fetch(`${API_BASE_URL}/api/restaurants/me/request-bank-change`, {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  Authorization: `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ 
+                                  newBankAccount: bankAccountInput.trim(),
+                                  newBankName: bankNameInput.trim()
+                                })
+                              });
+                              const body = await res.json().catch(() => null);
+                              if (!res.ok) {
+                                throw new Error(body?.message || 'Không thể gửi mã OTP');
+                              }
+                              setBankChangeOtp('');
+                              alert('Đã gửi lại mã OTP. Vui lòng kiểm tra email.');
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'Không thể gửi lại mã OTP');
+                            } finally {
+                              setIsSendingBankOtp(false);
+                            }
+                          }}
+                        >
+                          Gửi lại mã OTP
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end pt-4 border-t border-gray-200">
                   <Button
                     onClick={async () => {
                       try {
+                        // Kiểm tra nếu bank account thay đổi thì cần OTP
+                        const bankAccountChanged = 
+                          bankAccountInput.trim() !== (restaurant.bankAccount || '').trim() ||
+                          bankNameInput.trim() !== (restaurant.bankName || '').trim();
+                        
+                        if (bankAccountChanged && !bankChangeOtp) {
+                          alert('Vui lòng nhập mã OTP để xác thực đổi tài khoản ngân hàng');
+                          return;
+                        }
+                        if (bankAccountChanged && bankChangeOtp.length !== 6) {
+                          alert('Mã OTP phải có 6 chữ số');
+                          return;
+                        }
+
                         setIsSavingBank(true);
-                        await onUpdateRestaurant({ 
-                          bankName: bankNameInput,
-                          bankAccount: bankAccountInput 
-                        });
-                        alert('Đã cập nhật thông tin ngân hàng thành công!');
+                        const updateData: any = { 
+                          bankName: bankNameInput.trim(),
+                          bankAccount: bankAccountInput.trim()
+                        };
+                        if (bankAccountChanged && bankChangeOtp) {
+                          updateData.bankChangeOtp = bankChangeOtp.trim();
+                        }
+                        await onUpdateRestaurant(updateData);
+                        setBankChangeOtp('');
+                        setBankOtpSent(false);
+                        addNotification('success', '✅ Cập nhật thành công', 'Đã cập nhật thông tin ngân hàng');
                       } catch (err) {
                         alert(err instanceof Error ? err.message : 'Không thể cập nhật thông tin ngân hàng');
                       } finally {
@@ -2403,7 +2704,7 @@ const formatDateShort = (timestamp: number): string => {
                       setEmailChangeOtp('');
                       setOtpSent(false);
                       setNewEmailForChange('');
-                      alert('Đã cập nhật thông tin nhà hàng thành công!');
+                      addNotification('success', '✅ Cập nhật thành công', 'Đã cập nhật thông tin nhà hàng');
                     } catch (err) {
                       alert(err instanceof Error ? err.message : 'Không thể cập nhật thông tin nhà hàng');
                     } finally {
@@ -2717,7 +3018,7 @@ const formatDateShort = (timestamp: number): string => {
                     if (!res.ok) {
                       throw new Error(body?.message || 'Không thể tạo nhân viên');
                     }
-                    alert('Đã tạo tài khoản nhân viên thành công!');
+                    addNotification('success', '✅ Tạo nhân viên thành công', `Đã tạo tài khoản nhân viên: ${newStaffName.trim() || newStaffUsername.trim()}`);
                     setNewStaffUsername('');
                     setNewStaffPassword('');
                     setNewStaffName('');

@@ -4,8 +4,9 @@ import mongoose from "mongoose";
 import { Restaurant, RestaurantStatus } from "../models/Restaurant.js";
 import { User, UserRole } from "../models/User.js";
 import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
-import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP } from "../services/emailService.js";
+import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP, sendBankAccountChangeOTP } from "../services/emailService.js";
 import { EmailChangeToken } from "../models/EmailChangeToken.js";
+import { BankAccountChangeToken } from "../models/BankAccountChangeToken.js";
 import { Order, OrderStatus } from "../models/Order.js";
 import { MenuItem } from "../models/MenuItem.js";
 import fetch from "node-fetch";
@@ -355,6 +356,91 @@ router.post(
   }
 );
 
+// Restaurant Admin yêu cầu gửi OTP để đổi tài khoản ngân hàng
+router.post(
+  "/me/request-bank-change",
+  requireAuth,
+  requireRole([UserRole.RESTAURANT_ADMIN] as string[]),
+  async (req: AuthRequest, res) => {
+    try {
+      const restaurantId = req.auth?.restaurantId;
+      if (!restaurantId) {
+        return res.status(403).json({ message: "Không xác định được nhà hàng" });
+      }
+
+      const { newBankAccount, newBankName } = req.body as { newBankAccount?: string; newBankName?: string };
+      if (!newBankAccount || !newBankName) {
+        return res.status(400).json({ message: "Thiếu thông tin tài khoản ngân hàng mới" });
+      }
+
+      const normalizedBankAccount = newBankAccount.trim();
+      const normalizedBankName = newBankName.trim();
+
+      // Lấy thông tin restaurant hiện tại
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant) {
+        return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+      }
+
+      // Kiểm tra tài khoản ngân hàng mới có khác tài khoản cũ không
+      if (
+        restaurant.bankAccount?.trim() === normalizedBankAccount &&
+        restaurant.bankName?.trim() === normalizedBankName
+      ) {
+        return res.status(400).json({ message: "Tài khoản ngân hàng mới phải khác tài khoản hiện tại" });
+      }
+
+      // Tạo OTP 6 chữ số
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Lưu OTP vào database (hết hạn sau 15 phút)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // Xóa các OTP cũ chưa dùng của restaurant này
+      await BankAccountChangeToken.deleteMany({
+        restaurantId: new mongoose.Types.ObjectId(restaurantId),
+        used: false
+      });
+
+      await BankAccountChangeToken.create({
+        restaurantId: new mongoose.Types.ObjectId(restaurantId),
+        newBankAccount: normalizedBankAccount,
+        newBankName: normalizedBankName,
+        otp,
+        expiresAt,
+        used: false
+      });
+
+      // Gửi email chứa OTP đến email hiện tại
+      try {
+        await sendBankAccountChangeOTP({
+          to: restaurant.email,
+          restaurantName: restaurant.name,
+          ownerName: restaurant.ownerName,
+          otp,
+          newBankAccount: normalizedBankAccount,
+          newBankName: normalizedBankName
+        });
+      } catch (mailError) {
+        console.error("Không thể gửi email OTP đổi tài khoản ngân hàng", mailError);
+        return res.status(500).json({
+          message: "Không thể gửi email OTP. Vui lòng thử lại sau."
+        });
+      }
+
+      return res.json({
+        message: "Đã gửi mã OTP đến email hiện tại của nhà hàng"
+      });
+    } catch (error) {
+      console.error("Lỗi khi xử lý yêu cầu đổi tài khoản ngân hàng", error);
+      return res.status(500).json({
+        message: "Không thể xử lý yêu cầu đổi tài khoản ngân hàng"
+      });
+    }
+  }
+);
+
 // Restaurant Admin cập nhật thông tin nhà hàng của mình
 router.patch(
   "/me",
@@ -367,7 +453,7 @@ router.patch(
         return res.status(403).json({ message: "Không xác định được nhà hàng" });
       }
 
-      const { name, ownerName, email, address, phone, emailChangeOtp, bankAccount, bankName } = req.body as {
+      const { name, ownerName, email, address, phone, emailChangeOtp, bankAccount, bankName, bankChangeOtp } = req.body as {
         name?: string;
         ownerName?: string;
         email?: string;
@@ -376,6 +462,7 @@ router.patch(
         emailChangeOtp?: string;
         bankAccount?: string;
         bankName?: string;
+        bankChangeOtp?: string;
       };
 
       const updates: Record<string, unknown> = {};
@@ -383,15 +470,16 @@ router.patch(
       if (ownerName !== undefined) updates.ownerName = ownerName.trim();
       if (address !== undefined) updates.address = address.trim();
       if (phone !== undefined) updates.phone = phone.trim();
-      if (bankAccount !== undefined) updates.bankAccount = bankAccount.trim();
-      if (bankName !== undefined) updates.bankName = bankName.trim();
+
+      // Lấy restaurant hiện tại (dùng chung cho cả email và bank account)
+      let currentRestaurant = await Restaurant.findById(restaurantId);
+      if (!currentRestaurant) {
+        return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+      }
 
       // Xử lý đổi email - yêu cầu OTP
       if (email !== undefined) {
         const normalizedEmail = email.trim().toLowerCase();
-        
-        // Lấy restaurant hiện tại
-        const currentRestaurant = await Restaurant.findById(restaurantId);
         if (!currentRestaurant) {
           return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
         }
@@ -434,6 +522,51 @@ router.patch(
         }
 
         updates.email = normalizedEmail;
+      }
+
+      // Xử lý đổi tài khoản ngân hàng - yêu cầu OTP
+      if (bankAccount !== undefined || bankName !== undefined) {
+        const normalizedBankAccount = bankAccount?.trim() || "";
+        const normalizedBankName = bankName?.trim() || "";
+        
+        const currentBankAccount = currentRestaurant.bankAccount?.trim() || "";
+        const currentBankName = currentRestaurant.bankName?.trim() || "";
+
+        // Kiểm tra xem có thay đổi tài khoản ngân hàng không
+        const bankAccountChanged = 
+          normalizedBankAccount !== currentBankAccount ||
+          normalizedBankName !== currentBankName;
+
+        if (bankAccountChanged) {
+          if (!bankChangeOtp || bankChangeOtp.trim().length !== 6) {
+            return res.status(400).json({ 
+              message: "Cần mã OTP để đổi tài khoản ngân hàng. Vui lòng yêu cầu gửi OTP trước." 
+            });
+          }
+
+          // Xác thực OTP
+          const tokenDoc = await BankAccountChangeToken.findOne({
+            restaurantId: new mongoose.Types.ObjectId(restaurantId),
+            newBankAccount: normalizedBankAccount,
+            newBankName: normalizedBankName,
+            otp: bankChangeOtp.trim(),
+            used: false,
+            expiresAt: { $gt: new Date() }
+          });
+
+          if (!tokenDoc) {
+            return res.status(400).json({
+              message: "Mã OTP không hợp lệ hoặc đã hết hạn"
+            });
+          }
+
+          // Đánh dấu OTP đã dùng
+          tokenDoc.used = true;
+          await tokenDoc.save();
+        }
+
+        if (normalizedBankAccount) updates.bankAccount = normalizedBankAccount;
+        if (normalizedBankName) updates.bankName = normalizedBankName;
       }
 
       if (Object.keys(updates).length === 0) {
