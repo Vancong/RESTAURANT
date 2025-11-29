@@ -97,6 +97,8 @@ router.get("/orders", requireAuth, requireRole([UserRole.STAFF, UserRole.RESTAUR
 // Nhân viên xác nhận đơn (chuyển status)
 router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.RESTAURANT_ADMIN] as string[]), async (req: AuthRequest, res) => {
   const restaurantId = req.auth?.restaurantId;
+  const userId = req.auth?.sub;
+  const userRole = req.auth?.role;
   const { id } = req.params;
   const { status } = req.body as { status?: string };
 
@@ -108,9 +110,42 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
     return res.status(400).json({ message: "Trạng thái đơn hàng không hợp lệ" });
   }
 
+  // Kiểm tra đơn hàng tồn tại và lấy trạng thái hiện tại
+  const existingOrder = await Order.findOne({ _id: id, restaurantId });
+  if (!existingOrder) {
+    return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
+  }
+
+  // Nhân viên (STAFF) chỉ được phép xác nhận đơn (PENDING -> CONFIRMED)
+  if (userRole === UserRole.STAFF) {
+    if (status !== OrderStatus.CONFIRMED) {
+      return res.status(403).json({ message: "Nhân viên chỉ được phép xác nhận đơn hàng" });
+    }
+    if (existingOrder.status !== OrderStatus.PENDING) {
+      return res.status(403).json({ message: "Chỉ có thể xác nhận đơn hàng đang chờ xử lý" });
+    }
+  }
+
+  // Lấy thông tin nhân viên để lưu tên
+  let confirmedByName = "";
+  if (userId) {
+    const user = await User.findById(userId).select("name username");
+    if (user) {
+      confirmedByName = user.name || user.username || "";
+    }
+  }
+
+  const updateData: any = { status: status as OrderStatus };
+  
+  // Chỉ lưu thông tin nhân viên khi xác nhận đơn (CONFIRMED)
+  if (status === OrderStatus.CONFIRMED && userId) {
+    updateData.confirmedBy = new mongoose.Types.ObjectId(userId);
+    updateData.confirmedByName = confirmedByName;
+  }
+
   const order = await Order.findOneAndUpdate(
     { _id: id, restaurantId },
-    { status: status as OrderStatus },
+    updateData,
     { new: true }
   );
 

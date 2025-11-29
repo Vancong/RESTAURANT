@@ -22,6 +22,8 @@ export interface IOrder extends Document {
   totalAmount: number;
   status: OrderStatus;
   note?: string;
+  confirmedBy?: Types.ObjectId; // ID nhân viên đã xác nhận đơn
+  confirmedByName?: string; // Tên nhân viên đã xác nhận (để hiển thị nhanh)
 }
 
 const OrderItemSchema = new Schema<IOrderItem>({
@@ -59,6 +61,14 @@ const OrderSchema = new Schema<IOrder>(
       required: true
     },
     note: {
+      type: String,
+      trim: true
+    },
+    confirmedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User"
+    },
+    confirmedByName: {
       type: String,
       trim: true
     }

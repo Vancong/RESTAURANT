@@ -6,6 +6,7 @@ import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { CustomerView } from './components/CustomerView';
 import { StaffDashboard } from './components/StaffDashboard';
+import { ResetPassword } from './components/ResetPassword';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -54,6 +55,8 @@ const App: React.FC = () => {
   }, []);
 
   // "Routing" based on Hash for the demo
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -65,8 +68,14 @@ const App: React.FC = () => {
           setCurrentRestaurantId(rId);
           setCustomerTable(tId);
           setRole(Role.CUSTOMER);
+          setShowResetPassword(false);
         }
+      } else if (hash === '#/reset-password') {
+        setShowResetPassword(true);
+        setRole(Role.GUEST);
+        setCurrentRestaurantId(null);
       } else {
+        setShowResetPassword(false);
         // Default to login if not customer flow
         if (role === Role.CUSTOMER) {
              setRole(Role.GUEST);
@@ -79,7 +88,7 @@ const App: React.FC = () => {
     handleHashChange(); // Check on load
 
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [role]);
 
   // Load restaurants from backend
   useEffect(() => {
@@ -130,8 +139,8 @@ const App: React.FC = () => {
         const res = await fetch(`${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}`);
         if (!res.ok) {
           setMenuItems([]);
-        return;
-        }
+      return;
+    }
         const data: {
           _id: string;
           restaurantId: string;
@@ -165,8 +174,8 @@ const App: React.FC = () => {
   // Fetch orders for restaurant admin and staff
   useEffect(() => {
     if ((role !== Role.RESTAURANT_ADMIN && role !== Role.STAFF) || !currentRestaurantId) {
-      return;
-    }
+        return;
+      }
 
     const fetchOrders = async () => {
       try {
@@ -187,7 +196,8 @@ const App: React.FC = () => {
           totalAmount: o.totalAmount,
           status: o.status as OrderStatus,
           timestamp: new Date(o.createdAt).getTime(),
-          note: o.note
+          note: o.note,
+          confirmedByName: o.confirmedByName
         }));
         setOrders(mapped);
       } catch (e) {
@@ -483,7 +493,8 @@ const App: React.FC = () => {
         o.id === orderId 
           ? { 
               ...o, 
-              status: updated.status as OrderStatus 
+              status: updated.status as OrderStatus,
+              confirmedByName: updated.confirmedByName
             } 
           : o
       ));
@@ -547,6 +558,23 @@ const App: React.FC = () => {
       />
     );
   }
+
+  const handleRequestPasswordReset = async (email: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/request-password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể gửi email đặt lại mật khẩu');
+      }
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
 
   const resetRestaurantPassword = async (restaurantId: string, newPassword: string) => {
     try {
@@ -618,7 +646,23 @@ const App: React.FC = () => {
     );
   }
 
-  return <Login onLogin={handleLogin} error={loginError} />;
+  if (showResetPassword) {
+    return (
+      <ResetPassword
+        onSuccess={() => {
+          setShowResetPassword(false);
+          window.location.hash = '';
+          setLoginError('');
+        }}
+        onBack={() => {
+          setShowResetPassword(false);
+          window.location.hash = '';
+        }}
+      />
+    );
+  }
+
+  return <Login onLogin={handleLogin} error={loginError} onRequestPasswordReset={handleRequestPasswordReset} />;
 };
 
 export default App;

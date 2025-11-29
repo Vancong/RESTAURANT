@@ -344,6 +344,11 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         <span className="font-bold text-lg mr-3">Bàn {order.tableNumber}</span>
                         {renderStatusBadge(order.status)}
                         <span className="text-gray-400 text-xs ml-3">{new Date(order.timestamp).toLocaleTimeString()}</span>
+                        {order.status === OrderStatus.CONFIRMED && order.confirmedByName && (
+                          <span className="text-xs text-gray-500 ml-3">
+                            Đã xác nhận bởi: <span className="font-semibold text-brand-600">{order.confirmedByName}</span>
+                          </span>
+                        )}
                     </div>
                     <ul className="text-sm text-gray-600 space-y-1">
                       {order.items.map((item, idx) => (

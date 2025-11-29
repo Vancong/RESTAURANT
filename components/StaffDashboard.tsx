@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderStatus } from '../types';
 import { Button } from './Button';
-import { Clock, LogOut, CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 
 interface StaffDashboardProps {
   restaurantId: string;
@@ -40,7 +40,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         totalAmount: o.totalAmount,
         status: o.status as OrderStatus,
         timestamp: new Date(o.createdAt).getTime(),
-        note: o.note
+        note: o.note,
+        confirmedByName: o.confirmedByName
       }));
       setOrders(mapped);
     } catch (err) {
@@ -131,12 +132,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                   className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 flex-wrap">
                       <span className="font-bold text-lg">Bàn {order.tableNumber}</span>
                       {renderStatusBadge(order.status)}
                       <span className="text-gray-400 text-xs">
                         {new Date(order.timestamp).toLocaleTimeString()}
                       </span>
+                      {order.status === OrderStatus.CONFIRMED && order.confirmedByName && (
+                        <span className="text-xs text-gray-500">
+                          Đã xác nhận bởi: <span className="font-semibold text-brand-600">{order.confirmedByName}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -158,39 +164,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                     </p>
                     <div className="flex space-x-2">
                       {order.status === OrderStatus.PENDING && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => handleUpdateStatus(order.id, OrderStatus.CONFIRMED)}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" /> Nhận đơn
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => handleUpdateStatus(order.id, OrderStatus.CANCELLED)}
-                          >
-                            <XCircle className="w-4 h-4 mr-1" /> Hủy
-                          </Button>
-                        </>
-                      )}
-                      {order.status === OrderStatus.CONFIRMED && (
                         <Button
                           size="sm"
-                          variant="secondary"
-                          onClick={() => handleUpdateStatus(order.id, OrderStatus.SERVED)}
+                          onClick={() => handleUpdateStatus(order.id, OrderStatus.CONFIRMED)}
                         >
-                          Đã ra món
+                          <CheckCircle className="w-4 h-4 mr-1" /> Nhận đơn
                         </Button>
                       )}
-                      {order.status === OrderStatus.SERVED && (
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => handleUpdateStatus(order.id, OrderStatus.COMPLETED)}
-                        >
-                          Thanh toán
-                        </Button>
+                      {order.status !== OrderStatus.PENDING && order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED && (
+                        <span className="text-sm text-gray-500 italic">Chờ admin xử lý</span>
                       )}
                     </div>
                   </div>
