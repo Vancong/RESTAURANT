@@ -5,6 +5,7 @@ import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { RestaurantDashboard } from './components/RestaurantDashboard';
 import { CustomerView } from './components/CustomerView';
+import { ResetPassword } from './components/ResetPassword';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -20,11 +21,25 @@ const App: React.FC = () => {
   const [currentRestaurantId, setCurrentRestaurantId] = useState<string | null>(null);
   const [customerTable, setCustomerTable] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string>('');
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
   // "Routing" based on Hash for the demo
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+
+      if (hash.startsWith('#/reset-password')) {
+        const params = new URLSearchParams(hash.split('?')[1]);
+        const token = params.get('token');
+        setResetToken(token || '');
+        setRole(Role.GUEST);
+        setCurrentRestaurantId(null);
+        setCustomerTable(null);
+        return;
+      } else {
+        setResetToken(null);
+      }
+
       if (hash.startsWith('#/order')) {
         const params = new URLSearchParams(hash.split('?')[1]);
         const rId = params.get('r');
@@ -37,8 +52,8 @@ const App: React.FC = () => {
       } else {
         // Default to login if not customer flow
         if (role === Role.CUSTOMER) {
-             setRole(Role.GUEST);
-             setCurrentRestaurantId(null);
+          setRole(Role.GUEST);
+          setCurrentRestaurantId(null);
         }
       }
     };
@@ -322,6 +337,33 @@ const App: React.FC = () => {
     }
   };
 
+  const requestPasswordReset = async (email: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/auth/request-password-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || 'Không thể gửi email đặt lại mật khẩu');
+    }
+  };
+
+  const changeOwnPassword = async (oldPassword: string, newPassword: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({ oldPassword, newPassword })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.message || 'Không thể đổi mật khẩu');
+    }
+  };
+
   const addMenuItem = (data: Omit<MenuItem, 'id'>) => {
     const newItem: MenuItem = {
       ...data,
@@ -353,6 +395,22 @@ const App: React.FC = () => {
     };
     setOrders([...orders, newOrder]);
   };
+
+  if (resetToken !== null) {
+    return (
+      <ResetPassword
+        initialToken={resetToken}
+        onSuccess={() => {
+          setResetToken(null);
+          window.location.hash = '';
+        }}
+        onBack={() => {
+          setResetToken(null);
+          window.location.hash = '';
+        }}
+      />
+    );
+  }
 
   // Render Logic
   if (role === Role.CUSTOMER && currentRestaurantId) {
@@ -401,12 +459,13 @@ const App: React.FC = () => {
         onAddMenuItem={addMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
         onDeleteMenuItem={deleteMenuItem}
+        onChangePassword={changeOwnPassword}
         onLogout={handleLogout}
       />
     );
   }
 
-  return <Login onLogin={handleLogin} error={loginError} />;
+  return <Login onLogin={handleLogin} error={loginError} onRequestPasswordReset={requestPasswordReset} />;
 };
 
 export default App;

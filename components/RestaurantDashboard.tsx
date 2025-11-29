@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, CheckCircle, Clock, ChefHat, Trash, Sparkles } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, CheckCircle, Clock, ChefHat, Trash, Sparkles, Lock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -12,6 +12,7 @@ interface RestaurantDashboardProps {
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => void;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteMenuItem: (id: string) => void;
+  onChangePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   onLogout: () => void;
 }
 
@@ -22,12 +23,19 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onAddMenuItem,
   onUpdateOrderStatus,
   onDeleteMenuItem,
+  onChangePassword,
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Stats Logic
   const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
@@ -84,6 +92,40 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     return `${baseUrl}/#/order?r=${restaurant.id}&t=${qrTableInput}`;
   };
 
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError(null);
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setChangePasswordError('Vui lòng nhập đầy đủ các trường.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setChangePasswordError('Mật khẩu mới cần ít nhất 6 ký tự.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setChangePasswordError('Xác nhận mật khẩu không khớp.');
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      await onChangePassword(oldPassword, newPassword);
+      alert('Đổi mật khẩu thành công.');
+      setIsChangePasswordOpen(false);
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      setChangePasswordError(error instanceof Error ? error.message : 'Không thể đổi mật khẩu.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -118,6 +160,12 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
             <QrCode className="w-5 h-5 mr-3" /> Mã QR
           </button>
           <div className="pt-4 mt-4 border-t border-gray-100">
+            <button
+              onClick={() => setIsChangePasswordOpen(true)}
+              className="w-full flex items-center px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg mb-2"
+            >
+              <Lock className="w-5 h-5 mr-3" /> Đổi mật khẩu
+            </button>
              <button onClick={onLogout} className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
                 <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
              </button>
@@ -309,6 +357,68 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
             </div>
         )}
       </main>
+
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Đổi mật khẩu</h3>
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                <input
+                  type="password"
+                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={oldPassword}
+                  onChange={e => setOldPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                <input
+                  type="password"
+                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nhập lại mật khẩu mới</label>
+                <input
+                  type="password"
+                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+              {changePasswordError && (
+                <p className="text-sm text-red-600">{changePasswordError}</p>
+              )}
+              <div className="flex justify-end space-x-3 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setIsChangePasswordOpen(false);
+                    setOldPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setChangePasswordError(null);
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isChangingPassword}>
+                  {isChangingPassword ? 'Đang cập nhật...' : 'Lưu mật khẩu mới'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

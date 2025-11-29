@@ -10,6 +10,9 @@ export interface IUser extends Document {
   passwordHash: string;
   role: UserRole;
   restaurantId?: Types.ObjectId;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
+  passwordResetOtp?: string;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -32,7 +35,13 @@ const UserSchema = new Schema<IUser>(
     restaurantId: {
       type: Schema.Types.ObjectId,
       ref: "Restaurant"
-    }
+    },
+    passwordResetToken: {
+      type: String,
+      index: true
+    },
+    passwordResetExpires: Date,
+    passwordResetOtp: String
   },
   { timestamps: true }
 );
