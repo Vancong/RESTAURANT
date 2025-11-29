@@ -41,6 +41,100 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
     minute: '2-digit'
   });
 
+  // Hàm lấy mã ngân hàng dạng viết tắt cho API vietqr.co
+  // Tham khảo: https://vietqr.co/generate
+  const getBankCodeForAPI = (bankName: string | undefined): string => {
+    if (!bankName) return '';
+    
+    // Lấy phần đầu của tên ngân hàng (trước dấu ngoặc đơn nếu có)
+    const cleanBankName = bankName.split('(')[0].trim();
+    const bankNameUpper = cleanBankName.toUpperCase();
+    
+    const bankCodeMap: Record<string, string> = {
+      'VIETCOMBANK': 'vcb',
+      'VCB': 'vcb',
+      'BIDV': 'bidv',
+      'VIETINBANK': 'vietinbank',
+      'AGRIBANK': 'agribank',
+      'TECHCOMBANK': 'techcombank',
+      'ACB': 'acb',
+      'VPBANK': 'vpb',
+      'VP BANK': 'vpb',
+      'MBBANK': 'mb',
+      'MB BANK': 'mb',
+      'TPBANK': 'tpb',
+      'TP BANK': 'tpb',
+      'HDBANK': 'hdb',
+      'HD BANK': 'hdb',
+      'SHB': 'shb',
+      'VIB': 'vib',
+      'EXIMBANK': 'eximbank',
+      'SACOMBANK': 'sacombank',
+      'MSB': 'msb',
+      'OCB': 'ocb',
+      'SEABANK': 'seabank',
+      'SEA BANK': 'seabank',
+      'PVCOMBANK': 'pvcombank',
+      'PVCOM BANK': 'pvcombank',
+      'VIETABANK': 'vietabank',
+      'VIETA BANK': 'vietabank',
+      'BACABANK': 'bacabank',
+      'BACA BANK': 'bacabank',
+      'NCB': 'ncb',
+      'DONGABANK': 'dongabank',
+      'DONGA BANK': 'dongabank',
+      'GPBANK': 'gpbank',
+      'GP BANK': 'gpbank',
+      'KIENLONGBANK': 'kienlongbank',
+      'KIENLONG BANK': 'kienlongbank',
+      'NAMABANK': 'namabank',
+      'NAMA BANK': 'namabank',
+      'PGBANK': 'pgbank',
+      'PG BANK': 'pgbank',
+      'PUBLICBANK': 'publicbank',
+      'PUBLIC BANK': 'publicbank',
+      'AB BANK': 'abbank',
+      'ABANK': 'abbank',
+      'VIETBANK': 'vietbank',
+      'VIET BANK': 'vietbank'
+    };
+    
+    // Tìm mã ngân hàng từ tên (không phân biệt hoa thường)
+    for (const [key, code] of Object.entries(bankCodeMap)) {
+      if (bankNameUpper.includes(key)) {
+        console.log('Matched bank:', key, '->', code, 'from:', bankName);
+        return code;
+      }
+    }
+    
+    console.warn('Không tìm thấy mã ngân hàng cho:', bankName);
+    return '';
+  };
+
+  // Tạo URL QR code từ API vietqr.io (API chính thức của VietQR)
+  const bankCode = getBankCodeForAPI(restaurant.bankName);
+  const accountName = restaurant.name || 'Nha hang'; // Tên tài khoản
+  const accountNumber = restaurant.bankAccount || '';
+  const amount = Math.round(order.totalAmount); // Số tiền (làm tròn)
+  
+  // Sử dụng API img.vietqr.io để tạo QR code (API chính thức của VietQR)
+  // Format: https://img.vietqr.io/image/{bankCode}-{accountNumber}-{template}.jpg?amount={amount}&addInfo={content}
+  // Template: compact, compact2, qr_only, print
+  // API này tạo QR code đúng chuẩn VietQR và có thể quét được bằng app ngân hàng
+  const qrImageUrl = restaurant.bankAccount && bankCode
+    ? `https://img.vietqr.io/image/${bankCode}-${accountNumber}-compact2.jpg?amount=${amount}&addInfo=${encodeURIComponent(`Ban ${order.tableNumber}`)}`
+    : null;
+
+  // Debug
+  console.log('QR Code Debug:', {
+    bankName: restaurant.bankName,
+    bankCode,
+    accountNumber,
+    accountName,
+    amount,
+    qrImageUrl
+  });
+
   return (
     <>
       {/* Bản copy cho in - chỉ hiển thị khi in */}
@@ -114,6 +208,56 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
               </span>
             </div>
           </div>
+
+          {/* QR Code thanh toán */}
+          {restaurant.bankAccount ? (
+            qrImageUrl ? (
+              <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>Quét mã QR để thanh toán</p>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+                  <img 
+                    src={qrImageUrl} 
+                    alt="QR Code thanh toán" 
+                    style={{ width: '200px', height: '200px', objectFit: 'contain', border: '1px solid #eee' }}
+                    onError={(e) => {
+                      console.error('Lỗi tải QR code từ vietqr.co, URL:', qrImageUrl);
+                      const img = e.target as HTMLImageElement;
+                      img.style.display = 'none';
+                      const errorDiv = document.createElement('div');
+                      errorDiv.textContent = 'Không thể tải QR code. Vui lòng kiểm tra lại thông tin ngân hàng.';
+                      errorDiv.style.color = '#dc2626';
+                      errorDiv.style.fontSize = '12px';
+                      errorDiv.style.padding = '10px';
+                      img.parentElement?.appendChild(errorDiv);
+                    }}
+                  />
+                </div>
+                {restaurant.bankName && (
+                  <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+                    Ngân hàng: {restaurant.bankName}
+                  </p>
+                )}
+                <p style={{ fontSize: '12px', color: '#666' }}>
+                  STK: {restaurant.bankAccount}
+                </p>
+                <p style={{ fontSize: '12px', color: '#666' }}>
+                  Số tiền: {order.totalAmount.toLocaleString('vi-VN')}đ - Bàn: {order.tableNumber}
+                </p>
+              </div>
+            ) : (
+              <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px', border: '1px solid #fbbf24', borderRadius: '8px', backgroundColor: '#fffbeb' }}>
+                <p style={{ fontSize: '14px', color: '#92400e', marginBottom: '5px' }}>
+                  ⚠️ Không thể tạo QR code
+                </p>
+                <p style={{ fontSize: '12px', color: '#78350f' }}>
+                  Vui lòng kiểm tra lại tên ngân hàng: {restaurant.bankName || 'Chưa cập nhật'}
+                </p>
+                <p style={{ fontSize: '12px', color: '#78350f', marginTop: '5px' }}>
+                  STK: {restaurant.bankAccount}
+                </p>
+              </div>
+            )
+          ) : null}
 
           {/* Footer */}
           <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
@@ -209,6 +353,54 @@ export const Invoice: React.FC<InvoiceProps> = ({ order, restaurant, onClose, on
                 </span>
               </div>
             </div>
+
+            {/* QR Code thanh toán */}
+            {restaurant.bankAccount ? (
+              qrImageUrl ? (
+                <div className="mt-6 p-4 border border-gray-200 rounded-lg text-center">
+                  <p className="text-sm font-bold mb-3">Quét mã QR để thanh toán</p>
+                  <div className="flex justify-center mb-3">
+                    <img 
+                      src={qrImageUrl} 
+                      alt="QR Code thanh toán" 
+                      className="w-48 h-48 object-contain border border-gray-200"
+                      onError={(e) => {
+                        console.error('Lỗi tải QR code từ vietqr.co, URL:', qrImageUrl);
+                        const img = e.target as HTMLImageElement;
+                        img.style.display = 'none';
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'text-red-600 text-xs p-2';
+                        errorDiv.textContent = 'Không thể tải QR code. Vui lòng kiểm tra lại thông tin ngân hàng.';
+                        img.parentElement?.appendChild(errorDiv);
+                      }}
+                    />
+                  </div>
+                  {restaurant.bankName && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      Ngân hàng: {restaurant.bankName}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-600">
+                    STK: {restaurant.bankAccount}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Số tiền: {order.totalAmount.toLocaleString('vi-VN')}đ - Bàn: {order.tableNumber}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 p-4 border border-yellow-300 rounded-lg text-center bg-yellow-50">
+                  <p className="text-sm text-yellow-800 font-semibold mb-2">
+                    ⚠️ Không thể tạo QR code
+                  </p>
+                  <p className="text-xs text-yellow-700">
+                    Vui lòng kiểm tra lại tên ngân hàng: {restaurant.bankName || 'Chưa cập nhật'}
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    STK: {restaurant.bankAccount}
+                  </p>
+                </div>
+              )
+            ) : null}
 
             {/* Footer */}
             <div className="mt-8 text-center text-xs text-gray-500">

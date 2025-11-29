@@ -6,6 +6,7 @@ import { User, UserRole } from "../models/User.js";
 import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
 import { sendNewRestaurantWelcomeEmail, sendEmailChangeOTP } from "../services/emailService.js";
 import { EmailChangeToken } from "../models/EmailChangeToken.js";
+import fetch from "node-fetch";
 
 const router = Router();
 const APP_BASE_URL =
@@ -210,13 +211,15 @@ router.patch(
         return res.status(403).json({ message: "Không xác định được nhà hàng" });
       }
 
-      const { name, ownerName, email, address, phone, emailChangeOtp } = req.body as {
+      const { name, ownerName, email, address, phone, emailChangeOtp, bankAccount, bankName } = req.body as {
         name?: string;
         ownerName?: string;
         email?: string;
         address?: string;
         phone?: string;
         emailChangeOtp?: string;
+        bankAccount?: string;
+        bankName?: string;
       };
 
       const updates: Record<string, unknown> = {};
@@ -224,6 +227,8 @@ router.patch(
       if (ownerName !== undefined) updates.ownerName = ownerName.trim();
       if (address !== undefined) updates.address = address.trim();
       if (phone !== undefined) updates.phone = phone.trim();
+      if (bankAccount !== undefined) updates.bankAccount = bankAccount.trim();
+      if (bankName !== undefined) updates.bankName = bankName.trim();
 
       // Xử lý đổi email - yêu cầu OTP
       if (email !== undefined) {
@@ -499,6 +504,60 @@ router.post(
     }
   }
 );
+
+// Endpoint để tạo QR code từ API vietqr.co
+router.post("/generate-qr", async (req, res) => {
+  try {
+    const { bankCode, accountNumber, accountName, amount } = req.body;
+
+    if (!bankCode || !accountNumber || !accountName) {
+      return res.status(400).json({ 
+        message: "Thiếu thông tin: bankCode, accountNumber, accountName" 
+      });
+    }
+
+    // Gọi API của vietqr.co với payload đúng format
+    const response = await fetch("https://vietqr.co/livewire/message/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-Livewire": "true",
+      },
+      body: JSON.stringify({
+        fingerprint: {
+          id: `qr-${Date.now()}`,
+          name: "generate",
+          locale: "vi",
+          path: "generate",
+          method: "GET",
+          v: "acj"
+        },
+        serverMemo: {
+          children: [],
+          errors: []
+        },
+        updates: [{
+          type: "callMethod",
+          payload: {
+            id: `method-${Date.now()}`,
+            method: "generate",
+            params: [bankCode, accountNumber, accountName, amount || null]
+          }
+        }]
+      })
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Lỗi khi gọi API vietqr.co:", error);
+    res.status(500).json({ 
+      message: "Không thể tạo QR code", 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
+});
 
 export default router;
 

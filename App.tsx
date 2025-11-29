@@ -106,6 +106,8 @@ const App: React.FC = () => {
           phone: string;
           status: RestaurantStatus;
           active: boolean;
+          bankAccount?: string;
+          bankName?: string;
         }[] = await res.json();
         const mapped: Restaurant[] = data.map(r => ({
           id: r._id,
@@ -116,7 +118,9 @@ const App: React.FC = () => {
           address: r.address,
           phone: r.phone,
           status: r.status,
-          active: r.active
+          active: r.active,
+          bankAccount: r.bankAccount,
+          bankName: r.bankName
         }));
         setRestaurants(mapped);
       } catch (e) {
@@ -624,7 +628,12 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
+<<<<<<< Updated upstream
           emailChangeOtp: data.emailChangeOtp
+=======
+          bankAccount: data.bankAccount,
+          bankName: data.bankName
+>>>>>>> Stashed changes
         })
       });
       const body = await res.json().catch(() => null);
@@ -641,6 +650,8 @@ const App: React.FC = () => {
         phone: string;
         status: RestaurantStatus;
         active: boolean;
+        bankAccount?: string;
+        bankName?: string;
       } = body;
       const mapped: Restaurant = {
         id: updated._id,
@@ -651,7 +662,9 @@ const App: React.FC = () => {
         address: updated.address,
         phone: updated.phone,
         status: updated.status,
-        active: updated.active
+        active: updated.active,
+        bankAccount: updated.bankAccount,
+        bankName: updated.bankName
       };
       setRestaurants(prev =>
         prev.map(r => (r.id === mapped.id ? mapped : r))
@@ -680,7 +693,9 @@ const App: React.FC = () => {
           email: data.email,
           address: data.address,
           phone: data.phone,
-          status: data.status
+          status: data.status,
+          bankAccount: data.bankAccount,
+          bankName: data.bankName
         })
       });
       const body = await res.json().catch(() => null);
@@ -697,6 +712,8 @@ const App: React.FC = () => {
         phone: string;
         status: RestaurantStatus;
         active: boolean;
+        bankAccount?: string;
+        bankName?: string;
       } = body;
       const mapped: Restaurant = {
         id: updated._id,
@@ -707,7 +724,9 @@ const App: React.FC = () => {
         address: updated.address,
         phone: updated.phone,
         status: updated.status,
-        active: updated.active
+        active: updated.active,
+        bankAccount: updated.bankAccount,
+        bankName: updated.bankName
       };
       setRestaurants(prev =>
         prev.map(r => (r.id === mapped.id ? mapped : r))

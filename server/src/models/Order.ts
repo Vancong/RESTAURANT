@@ -25,6 +25,8 @@ export interface IOrder extends Document {
   customerName?: string; // Tên khách hàng
   confirmedBy?: Types.ObjectId; // ID nhân viên đã xác nhận đơn
   confirmedByName?: string; // Tên nhân viên đã xác nhận (để hiển thị nhanh)
+  createdAt?: Date; // Tự động tạo bởi Mongoose timestamps
+  updatedAt?: Date; // Tự động tạo bởi Mongoose timestamps
 }
 
 const OrderItemSchema = new Schema<IOrderItem>({

@@ -3,7 +3,7 @@ import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings, CreditCard } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -29,7 +29,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onUpdateRestaurant,
   onLogout
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'bank' | 'settings'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -62,13 +62,51 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     ownerName: restaurant.ownerName,
     email: restaurant.email,
     address: restaurant.address,
-    phone: restaurant.phone
+    phone: restaurant.phone,
+    bankAccount: restaurant.bankAccount || ''
   });
   const [isSavingRestaurant, setIsSavingRestaurant] = useState(false);
   const [emailChangeOtp, setEmailChangeOtp] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [newEmailForChange, setNewEmailForChange] = useState('');
+  const [bankAccountInput, setBankAccountInput] = useState(restaurant.bankAccount || '');
+  const [bankNameInput, setBankNameInput] = useState(restaurant.bankName || '');
+  const [isSavingBank, setIsSavingBank] = useState(false);
+
+  // Danh sách các ngân hàng phổ biến ở Việt Nam
+  const banks = [
+    'Vietcombank (Ngân hàng Ngoại thương Việt Nam)',
+    'BIDV (Ngân hàng Đầu tư và Phát triển Việt Nam)',
+    'Vietinbank (Ngân hàng Công thương Việt Nam)',
+    'Agribank (Ngân hàng Nông nghiệp và Phát triển Nông thôn)',
+    'Techcombank (Ngân hàng Kỹ thương Việt Nam)',
+    'ACB (Ngân hàng Á Châu)',
+    'VPBank (Ngân hàng Việt Nam Thịnh Vượng)',
+    'MBBank (Ngân hàng Quân đội)',
+    'TPBank (Ngân hàng Tiên Phong)',
+    'HDBank (Ngân hàng Phát triển Thành phố Hồ Chí Minh)',
+    'SHB (Ngân hàng Sài Gòn - Hà Nội)',
+    'VIB (Ngân hàng Quốc tế Việt Nam)',
+    'Eximbank (Ngân hàng Xuất Nhập khẩu Việt Nam)',
+    'Sacombank (Ngân hàng Sài Gòn Thương Tín)',
+    'MSB (Ngân hàng Hàng Hải)',
+    'OCB (Ngân hàng Phương Đông)',
+    'SeABank (Ngân hàng Đông Nam Á)',
+    'PVcomBank (Ngân hàng Đại Chúng)',
+    'VietABank (Ngân hàng Việt Á)',
+    'BacABank (Ngân hàng Bắc Á)',
+    'NCB (Ngân hàng Quốc Dân)',
+    'DongABank (Ngân hàng Đông Á)',
+    'GPBank (Ngân hàng Dầu Khí Toàn Cầu)',
+    'Kienlongbank (Ngân hàng Kiên Long)',
+    'NamABank (Ngân hàng Nam Á)',
+    'PGBank (Ngân hàng Xăng dầu Petrolimex)',
+    'PublicBank (Ngân hàng Public Việt Nam)',
+    'ABBank (Ngân hàng An Bình)',
+    'VietBank (Ngân hàng Việt Nam Thương Tín)',
+    'BAOVIET Bank (Ngân hàng Bảo Việt)'
+  ];
 
   // Cập nhật form khi restaurant prop thay đổi
   useEffect(() => {
@@ -78,12 +116,15 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
         ownerName: restaurant.ownerName,
         email: restaurant.email,
         address: restaurant.address,
-        phone: restaurant.phone
+        phone: restaurant.phone,
+        bankAccount: restaurant.bankAccount || ''
       });
       setEmailChangeOtp('');
       setOtpSent(false);
       setNewEmailForChange('');
     }
+    setBankAccountInput(restaurant.bankAccount || '');
+    setBankNameInput(restaurant.bankName || '');
   }, [restaurant, isEditingRestaurant]);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -344,6 +385,12 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'staff' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
           >
             <Users className="w-5 h-5 mr-3" /> Nhân viên
+          </button>
+          <button 
+            onClick={() => setActiveTab('bank')}
+            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'bank' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+          >
+            <CreditCard className="w-5 h-5 mr-3" /> Ngân hàng
           </button>
           <button 
             onClick={() => setActiveTab('settings')}
@@ -704,11 +751,112 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             </div>
         )}
 
+        {/* BANK TAB */}
+        {activeTab === 'bank' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Thông tin ngân hàng</h2>
+            
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex items-center mb-6">
+                <CreditCard className="w-6 h-6 mr-3 text-brand-600" />
+                <h3 className="text-lg font-bold">Cấu hình thông tin ngân hàng</h3>
+              </div>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tên ngân hàng <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-brand-500 focus:border-brand-500"
+                    value={bankNameInput}
+                    onChange={(e) => setBankNameInput(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Chọn ngân hàng --</option>
+                    {banks.map((bank, index) => (
+                      <option key={index} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Vui lòng chọn ngân hàng nơi bạn mở tài khoản
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Số tài khoản ngân hàng
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    value={bankAccountInput}
+                    onChange={(e) => setBankAccountInput(e.target.value)}
+                    placeholder="Nhập số tài khoản ngân hàng"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Số tài khoản này sẽ được hiển thị trong QR code thanh toán khi khách hàng thanh toán đơn hàng
+                  </p>
+                </div>
+
+                {restaurant.bankName || restaurant.bankAccount ? (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-semibold text-blue-900 mb-2">Thông tin hiện tại:</p>
+                    {restaurant.bankName && (
+                      <p className="text-sm text-blue-800 mb-1">
+                        <span className="font-semibold">Tên ngân hàng: </span>
+                        {restaurant.bankName}
+                      </p>
+                    )}
+                    {restaurant.bankAccount && (
+                      <p className="text-sm text-blue-800">
+                        <span className="font-semibold">Số tài khoản: </span>
+                        {restaurant.bankAccount}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Chưa có thông tin ngân hàng. Vui lòng nhập thông tin để khách hàng có thể thanh toán qua QR code.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t border-gray-200">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        setIsSavingBank(true);
+                        await onUpdateRestaurant({ 
+                          bankName: bankNameInput,
+                          bankAccount: bankAccountInput 
+                        });
+                        alert('Đã cập nhật thông tin ngân hàng thành công!');
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : 'Không thể cập nhật thông tin ngân hàng');
+                      } finally {
+                        setIsSavingBank(false);
+                      }
+                    }}
+                    disabled={isSavingBank}
+                  >
+                    {isSavingBank ? 'Đang lưu...' : 'Lưu thông tin ngân hàng'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* SETTINGS TAB */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Thông tin nhà hàng</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Cài đặt</h2>
             
+            {/* Thông tin nhà hàng */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold flex items-center">
@@ -724,7 +872,8 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                         ownerName: restaurant.ownerName,
                         email: restaurant.email,
                         address: restaurant.address,
-                        phone: restaurant.phone
+                        phone: restaurant.phone,
+                        bankAccount: restaurant.bankAccount || ''
                       });
                     }}
                   >
@@ -936,6 +1085,21 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                       onChange={(e) => setRestaurantForm({ ...restaurantForm, phone: e.target.value })}
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Số tài khoản ngân hàng
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.bankAccount}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, bankAccount: e.target.value })}
+                      placeholder="Nhập số tài khoản ngân hàng"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Số tài khoản này sẽ được hiển thị trong QR code thanh toán
+                    </p>
+                  </div>
                   <div className="flex justify-end space-x-2 pt-2">
                     <Button
                       type="button"
@@ -947,7 +1111,8 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                           ownerName: restaurant.ownerName,
                           email: restaurant.email,
                           address: restaurant.address,
-                          phone: restaurant.phone
+                          phone: restaurant.phone,
+                          bankAccount: restaurant.bankAccount || ''
                         });
                       }}
                     >
@@ -989,6 +1154,14 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                       Số điện thoại
                     </label>
                     <p className="text-gray-900 font-medium">{restaurant.phone}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Số tài khoản ngân hàng
+                    </label>
+                    <p className="text-gray-900 font-medium">
+                      {restaurant.bankAccount || <span className="text-gray-400 italic">Chưa cập nhật</span>}
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">

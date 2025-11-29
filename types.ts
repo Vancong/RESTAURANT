@@ -21,6 +21,8 @@ export interface Restaurant {
   phone: string;
   status: RestaurantStatus;
   active: boolean;
+  bankAccount?: string; // Số tài khoản ngân hàng
+  bankName?: string; // Tên ngân hàng
 }
 
 export interface NewRestaurantPayload {

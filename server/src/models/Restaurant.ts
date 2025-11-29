@@ -14,6 +14,8 @@ export interface IRestaurant extends Document {
   phone: string;
   status: RestaurantStatus;
   active: boolean;
+  bankAccount?: string; // Số tài khoản ngân hàng
+  bankName?: string; // Tên ngân hàng
 }
 
 const RestaurantSchema = new Schema<IRestaurant>(
@@ -58,6 +60,14 @@ const RestaurantSchema = new Schema<IRestaurant>(
     active: {
       type: Boolean,
       default: true
+    },
+    bankAccount: {
+      type: String,
+      trim: true
+    },
+    bankName: {
+      type: String,
+      trim: true
     }
   },
   { timestamps: true }
