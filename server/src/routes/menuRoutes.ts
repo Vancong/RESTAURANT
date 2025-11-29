@@ -54,6 +54,38 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
   res.status(201).json(item);
 });
 
+// Restaurant Admin: sửa món
+router.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const restaurantId = req.auth?.restaurantId;
+  if (!restaurantId) {
+    return res
+      .status(403)
+      .json({ message: "Chỉ admin nhà hàng mới được sửa món" });
+  }
+
+  const { name, description, price, category, imageUrl, available } = req.body;
+
+  const update: any = {};
+  if (name !== undefined) update.name = name;
+  if (description !== undefined) update.description = description;
+  if (price !== undefined) update.price = price;
+  if (category !== undefined) update.category = category;
+  if (imageUrl !== undefined) update.imageUrl = imageUrl;
+  if (available !== undefined) update.available = available;
+
+  const item = await MenuItem.findOneAndUpdate(
+    { _id: req.params.id, restaurantId },
+    update,
+    { new: true }
+  );
+
+  if (!item) {
+    return res.status(404).json({ message: "Không tìm thấy món ăn" });
+  }
+
+  res.json(item);
+});
+
 // Restaurant Admin: xóa món
 router.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const restaurantId = req.auth?.restaurantId;

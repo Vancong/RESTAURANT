@@ -7,7 +7,7 @@ interface SuperAdminDashboardProps {
   restaurants: Restaurant[];
   onAddRestaurant: (r: NewRestaurantPayload) => void;
   onToggleActive: (id: string) => void;
-  onResetPassword: (id: string, password: string) => void;
+  onResetRestaurantPassword: (id: string, newPassword: string) => Promise<any>;
   onUpdateRestaurant: (id: string, payload: {
     name: string;
     username: string;
@@ -24,7 +24,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   restaurants,
   onAddRestaurant,
   onToggleActive,
-  onResetPassword,
+  onResetRestaurantPassword,
   onUpdateRestaurant,
   onLogout
 }) => {
@@ -39,11 +39,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     email: '',
     address: '',
     phone: '',
-    status: 'ACTIVE'
+    status: RestaurantStatus.ACTIVE
   };
   const [newRest, setNewRest] = useState<NewRestaurantPayload>(initialForm);
-  const [resetPassword, setResetPassword] = useState('');
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [isResetLoading, setIsResetLoading] = useState(false);
   const emptyEditForm = {
     name: '',
     username: '',
@@ -66,16 +68,34 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const openResetModal = (restaurant: Restaurant) => {
     setResetTarget({ id: restaurant.id, name: restaurant.name });
     setResetPassword('');
+    setResetConfirm('');
     setIsResetModalOpen(true);
   };
 
-  const handleResetSubmit = (e: React.FormEvent) => {
+  const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetTarget) return;
-    onResetPassword(resetTarget.id, resetPassword);
-    setIsResetModalOpen(false);
-    setResetPassword('');
-    setResetTarget(null);
+    if (!resetPassword || !resetConfirm) {
+      alert('Vui lòng nhập đủ mật khẩu mới và xác nhận');
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      alert('Mật khẩu xác nhận không khớp');
+      return;
+    }
+    try {
+      setIsResetLoading(true);
+      await onResetRestaurantPassword(resetTarget.id, resetPassword);
+      alert('Đã đặt lại mật khẩu cho nhà hàng');
+      setIsResetModalOpen(false);
+      setResetPassword('');
+      setResetConfirm('');
+      setResetTarget(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể đặt lại mật khẩu');
+    } finally {
+      setIsResetLoading(false);
+    }
   };
 
   const openEditModal = (restaurant: Restaurant) => {
@@ -380,18 +400,32 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   onChange={e => setResetPassword(e.target.value)}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Xác nhận mật khẩu mới</label>
+                <input
+                  required
+                  type="password"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  value={resetConfirm}
+                  onChange={e => setResetConfirm(e.target.value)}
+                />
+              </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <Button
                   variant="secondary"
                   onClick={() => {
                     setIsResetModalOpen(false);
                     setResetTarget(null);
+                    setResetPassword('');
+                    setResetConfirm('');
                   }}
                   type="button"
                 >
                   Hủy
                 </Button>
-                <Button type="submit">Cập nhật</Button>
+                <Button type="submit" disabled={isResetLoading}>
+                  {isResetLoading ? 'Đang xử lý...' : 'Lưu mật khẩu mới'}
+                </Button>
               </div>
             </form>
           </div>

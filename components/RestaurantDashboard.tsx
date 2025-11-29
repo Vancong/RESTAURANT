@@ -1,18 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, CheckCircle, Clock, ChefHat, Trash, Sparkles, Lock } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
   restaurant: Restaurant;
   menu: MenuItem[];
   orders: Order[];
-  onAddMenuItem: (item: Omit<MenuItem, 'id'>) => void;
+  onAddMenuItem: (item: Omit<MenuItem, 'id'>) => Promise<void>;
+  onUpdateMenuItem: (id: string, data: Partial<MenuItem>) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  onDeleteMenuItem: (id: string) => void;
-  onChangePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  onDeleteMenuItem: (id: string) => Promise<void>;
+  onChangePassword?: (oldPassword: string, newPassword: string) => Promise<void>;
   onLogout: () => void;
 }
 
@@ -21,6 +22,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   menu,
   orders,
   onAddMenuItem,
+  onUpdateMenuItem,
   onUpdateOrderStatus,
   onDeleteMenuItem,
   onChangePassword,
@@ -30,12 +32,22 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isChangePwOpen, setIsChangePwOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [tables, setTables] = useState<{ id: string; code: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [isSavingMenuItem, setIsSavingMenuItem] = useState(false);
+  const [deletingMenuId, setDeletingMenuId] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  const AUTH_TOKEN_KEY = 'qr_food_order_token';
+  const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
   // Stats Logic
   const completedOrders = orders.filter(o => o.status === OrderStatus.COMPLETED || o.status === OrderStatus.SERVED);
@@ -56,10 +68,15 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     setIsAiLoading(false);
   };
 
-  const handleSubmitMenu = (e: React.FormEvent) => {
+  const handleSubmitMenu = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newItem.name && newItem.price) {
-      onAddMenuItem({
+    if (!newItem.name || !newItem.price) {
+      alert('Vui lòng nhập tên món và giá');
+      return;
+    }
+    try {
+      setIsSavingMenuItem(true);
+      await onAddMenuItem({
         restaurantId: restaurant.id,
         name: newItem.name,
         price: Number(newItem.price),
@@ -70,6 +87,22 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
       });
       setNewItem({ category: 'Món Chính', available: true, name: '', price: 0, description: '' });
       alert("Đã thêm món thành công!");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể thêm món');
+    } finally {
+      setIsSavingMenuItem(false);
+    }
+  };
+
+  const handleDeleteMenu = async (id: string) => {
+    if (!window.confirm('Xóa món này khỏi thực đơn?')) return;
+    try {
+      setDeletingMenuId(id);
+      await onDeleteMenuItem(id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể xóa món');
+    } finally {
+      setDeletingMenuId(null);
     }
   };
 
@@ -92,38 +125,120 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     return `${baseUrl}/#/order?r=${restaurant.id}&t=${qrTableInput}`;
   };
 
-  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setChangePasswordError(null);
-
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      setChangePasswordError('Vui lòng nhập đầy đủ các trường.');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setChangePasswordError('Mật khẩu mới cần ít nhất 6 ký tự.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setChangePasswordError('Xác nhận mật khẩu không khớp.');
-      return;
-    }
-
+  const fetchTables = async () => {
     try {
-      setIsChangingPassword(true);
-      await onChangePassword(oldPassword, newPassword);
-      alert('Đổi mật khẩu thành công.');
-      setIsChangePasswordOpen(false);
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (error) {
-      setChangePasswordError(error instanceof Error ? error.message : 'Không thể đổi mật khẩu.');
-    } finally {
-      setIsChangingPassword(false);
+      const res = await fetch(`${API_BASE_URL}/api/tables?restaurantId=${restaurant.id}`);
+      if (!res.ok) return;
+      const data: { _id: string; code: string }[] = await res.json();
+      setTables(data.map(t => ({ id: t._id, code: t.code })));
+    } catch (err) {
+      console.error('Không thể tải danh sách bàn', err);
     }
+  };
+
+  const handleSaveTable = async () => {
+    if (!qrTableInput.trim()) {
+      alert('Vui lòng nhập số bàn trước khi lưu');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('qr_food_order_token');
+      if (!token) {
+        alert('Vui lòng đăng nhập lại để lưu số bàn');
+        return;
+      }
+      const res = await fetch(`${API_BASE_URL}/api/tables`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ code: qrTableInput.trim() })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể lưu thông tin bàn');
+      }
+      alert('Đã lưu số bàn vào hệ thống');
+      fetchTables();
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Không thể lưu số bàn, vui lòng thử lại'
+      );
+    }
+  };
+
+  useEffect(() => {
+    fetchTables();
+  }, [restaurant.id]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/categories?restaurantId=${restaurant.id}`);
+      if (!res.ok) return;
+      const data: { _id: string; name: string }[] = await res.json();
+      setCategories(data.map(c => ({ id: c._id, name: c.name })));
+    } catch (err) {
+      console.error('Không thể tải danh mục', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, [restaurant.id]);
+
+  const CategoryCreator: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
+    const [name, setName] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleCreate = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!name.trim()) return;
+      try {
+        setLoading(true);
+        const token = localStorage.getItem(AUTH_TOKEN_KEY);
+        if (!token) throw new Error('Vui lòng đăng nhập lại.');
+        const res = await fetch(`${API_BASE_URL}/api/categories`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ name: name.trim() })
+        });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(body?.message || 'Không thể tạo danh mục');
+        }
+        setName('');
+        onCreated();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Không thể tạo danh mục');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <form onSubmit={handleCreate} className="space-y-2 mt-3">
+        <label className="block text-xs font-medium text-gray-600">Thêm danh mục mới</label>
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
+            placeholder="VD: Món Chính, Đồ Uống..."
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <Button type="submit" size="sm" disabled={loading}>
+            <Plus className="w-3 h-3 mr-1" />
+            {loading ? 'Đang thêm' : 'Thêm'}
+          </Button>
+        </div>
+      </form>
+    );
   };
 
   return (
@@ -159,16 +274,21 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
           >
             <QrCode className="w-5 h-5 mr-3" /> Mã QR
           </button>
-          <div className="pt-4 mt-4 border-t border-gray-100">
+          <div className="pt-4 mt-4 border-t border-gray-100 space-y-2">
+            {onChangePassword && (
+              <button
+                onClick={() => setIsChangePwOpen(true)}
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+              >
+                <Lock className="w-5 h-5 mr-3" /> Đổi mật khẩu
+              </button>
+            )}
             <button
-              onClick={() => setIsChangePasswordOpen(true)}
-              className="w-full flex items-center px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg mb-2"
+              onClick={onLogout}
+              className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
             >
-              <Lock className="w-5 h-5 mr-3" /> Đổi mật khẩu
+              <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
             </button>
-             <button onClick={onLogout} className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
-                <LogOut className="w-5 h-5 mr-3" /> Đăng xuất
-             </button>
           </div>
         </nav>
       </aside>
@@ -239,13 +359,24 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Danh mục</label>
-                        <input required className="mt-1 w-full border border-gray-300 rounded-md p-2" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} list="categories" />
-                        <datalist id="categories">
-                            <option value="Món Chính" />
-                            <option value="Đồ Uống" />
-                            <option value="Khai Vị" />
-                            <option value="Tráng Miệng" />
-                        </datalist>
+                        <select
+                          required
+                          className="mt-1 w-full border border-gray-300 rounded-md p-2 bg-white"
+                          value={newItem.category || ''}
+                          onChange={e => setNewItem({ ...newItem, category: e.target.value })}
+                        >
+                          <option value="" disabled>Chọn danh mục</option>
+                          {categories.map(cat => (
+                            <option key={cat.id} value={cat.name}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                        {categories.length === 0 && (
+                          <p className="mt-1 text-xs text-red-500">
+                            Chưa có danh mục nào. Vui lòng thêm danh mục ở cột bên cạnh.
+                          </p>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                          <div className="flex justify-between items-center mb-1">
@@ -257,26 +388,112 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
                         <textarea className="w-full border border-gray-300 rounded-md p-2 text-sm" rows={2} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} />
                     </div>
                     <div className="md:col-span-2">
-                        <Button type="submit" className="w-full">Thêm vào thực đơn</Button>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh món ăn</label>
+                      <div className="flex items-center space-x-4">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="text-sm"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+                              alert('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET).');
+                              return;
+                            }
+                            try {
+                              setIsUploadingImage(true);
+                              const formData = new FormData();
+                              formData.append('file', file);
+                              formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+                              const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                                method: 'POST',
+                                body: formData
+                              });
+                              const data = await res.json();
+                              if (!res.ok) {
+                                throw new Error(data?.error?.message || 'Upload ảnh thất bại');
+                              }
+                              setNewItem(prev => ({ ...prev, imageUrl: data.secure_url }));
+                            } catch (err) {
+                              alert(err instanceof Error ? err.message : 'Không thể upload ảnh');
+                            } finally {
+                              setIsUploadingImage(false);
+                            }
+                          }}
+                        />
+                        {isUploadingImage && (
+                          <span className="text-xs text-gray-500">Đang upload ảnh...</span>
+                        )}
+                      </div>
+                      {newItem.imageUrl && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500 mb-1">Preview:</p>
+                          <img
+                            src={newItem.imageUrl}
+                            alt="Preview món"
+                            className="w-32 h-24 object-cover rounded-md border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="md:col-span-2">
+                        <Button type="submit" className="w-full" disabled={isSavingMenuItem}>
+                          {isSavingMenuItem ? 'Đang lưu...' : 'Thêm vào thực đơn'}
+                        </Button>
                     </div>
                 </form>
              </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                 {menu.map(item => (
-                     <div key={item.id} className="bg-white border rounded-lg p-4 flex flex-col relative group">
-                         <img src={item.imageUrl} alt={item.name} className="w-full h-32 object-cover rounded-md mb-3 bg-gray-100" />
-                         <h4 className="font-bold text-gray-900">{item.name}</h4>
-                         <p className="text-sm text-gray-500 mb-2">{item.price.toLocaleString('vi-VN')}đ</p>
-                         <p className="text-xs text-gray-400 line-clamp-2 mb-3 flex-1">{item.description}</p>
-                         <Button variant="danger" size="sm" onClick={() => onDeleteMenuItem(item.id)} className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2">
-                             <Trash className="w-4 h-4" />
-                         </Button>
-                         <div className="mt-auto">
-                            <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{item.category}</span>
-                         </div>
-                     </div>
-                 ))}
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+               {/* Danh sách món */}
+               <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {menu.map(item => (
+                    <div key={item.id} className="bg-white border rounded-lg p-4 flex flex-col relative group">
+                        <img src={item.imageUrl} alt={item.name} className="w-full h-32 object-cover rounded-md mb-3 bg-gray-100" />
+                        <h4 className="font-bold text-gray-900 line-clamp-1">{item.name}</h4>
+                        <p className="text-sm text-gray-500 mb-2">{item.price.toLocaleString('vi-VN')}đ</p>
+                        <p className="text-xs text-gray-400 line-clamp-2 mb-3 flex-1">{item.description}</p>
+                        <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            variant="secondary" 
+                            size="sm"
+                            onClick={() => setEditingItem(item)}
+                          >
+                            Sửa
+                          </Button>
+                          <Button 
+                            variant="danger" 
+                            size="sm" 
+                            onClick={() => handleDeleteMenu(item.id)} 
+                            disabled={deletingMenuId === item.id}
+                          >
+                            <Trash className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="mt-auto">
+                           <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{item.category}</span>
+                        </div>
+                    </div>
+                ))}
+               </div>
+
+               {/* Cột danh mục */}
+               <div className="bg-white border rounded-lg p-4 space-y-3">
+                 <h4 className="font-bold text-gray-900 mb-2">Danh mục</h4>
+                 <ul className="space-y-1 max-h-48 overflow-y-auto text-sm">
+                   {categories.map(cat => (
+                     <li key={cat.id} className="flex items-center justify-between">
+                       <span>{cat.name}</span>
+                     </li>
+                   ))}
+                   {categories.length === 0 && (
+                     <li className="text-xs text-gray-500">Chưa có danh mục.</li>
+                   )}
+                 </ul>
+                 <CategoryCreator onCreated={fetchCategories} />
+               </div>
              </div>
           </div>
         )}
@@ -329,6 +546,9 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
                         value={qrTableInput}
                         onChange={(e) => setQrTableInput(e.target.value)}
                     />
+                    <Button type="button" variant="secondary" onClick={handleSaveTable}>
+                      Lưu bàn
+                    </Button>
                 </div>
 
                 {qrTableInput && (
@@ -354,65 +574,247 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
                         <p className="mt-2 text-sm text-gray-500">In hình này và dán lên bàn</p>
                     </div>
                 )}
+
+                {tables.length > 0 && (
+                  <div className="mt-10 text-left">
+                    <h3 className="text-lg font-bold mb-4 text-gray-800">Danh sách bàn đã lưu</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {tables.map(table => {
+                        const origin = window.location.origin;
+                        const baseUrl = origin === 'null' ? 'http://localhost:3000' : origin;
+                        const tableUrl = `${baseUrl}/#/order?r=${restaurant.id}&t=${table.code}`;
+                        return (
+                          <div key={table.id} className="border rounded-xl p-4 bg-gray-50 flex flex-col space-y-3">
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase">Số bàn</p>
+                              <p className="text-xl font-bold text-gray-900">{table.code}</p>
+                            </div>
+                            <div className="bg-white p-2 border rounded-lg">
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tableUrl)}`}
+                                alt={`QR bàn ${table.code}`}
+                                className="w-full h-40 object-contain"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="text-xs text-brand-600 hover:text-brand-800 truncate text-left"
+                              onClick={() => navigator.clipboard.writeText(tableUrl).then(() => alert('Đã copy link bàn!'))}
+                            >
+                              {tableUrl}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
             </div>
         )}
       </main>
 
-      {isChangePasswordOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Đổi mật khẩu</h3>
-            <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+      {/* Change Password Modal */}
+      {isChangePwOpen && onChangePassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Đổi mật khẩu</h3>
+              <button
+                onClick={() => {
+                  setIsChangePwOpen(false);
+                  setOldPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }}
+                className="p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!onChangePassword) return;
+                if (!oldPassword || !newPassword || !confirmPassword) {
+                  alert('Vui lòng nhập đầy đủ thông tin');
+                  return;
+                }
+                if (newPassword !== confirmPassword) {
+                  alert('Mật khẩu mới và xác nhận không khớp');
+                  return;
+                }
+                try {
+                  await onChangePassword(oldPassword, newPassword);
+                  alert('Đổi mật khẩu thành công');
+                  setIsChangePwOpen(false);
+                  setOldPassword('');
+                  setNewPassword('');
+                  setConfirmPassword('');
+                } catch (err) {
+                  alert(
+                    err instanceof Error ? err.message : 'Không thể đổi mật khẩu, vui lòng thử lại'
+                  );
+                }
+              }}
+            >
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mật khẩu hiện tại
+                </label>
                 <input
                   type="password"
-                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   value={oldPassword}
-                  onChange={e => setOldPassword(e.target.value)}
-                  required
+                  onChange={(e) => setOldPassword(e.target.value)}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mật khẩu mới
+                </label>
                 <input
                   type="password"
-                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  required
-                  minLength={6}
+                  onChange={(e) => setNewPassword(e.target.value)}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nhập lại mật khẩu mới</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Xác nhận mật khẩu mới
+                </label>
                 <input
                   type="password"
-                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  required
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                 />
               </div>
-              {changePasswordError && (
-                <p className="text-sm text-red-600">{changePasswordError}</p>
-              )}
-              <div className="flex justify-end space-x-3 pt-2">
+              <div className="flex justify-end space-x-2 pt-2">
                 <Button
                   type="button"
                   variant="secondary"
                   onClick={() => {
-                    setIsChangePasswordOpen(false);
+                    setIsChangePwOpen(false);
                     setOldPassword('');
                     setNewPassword('');
                     setConfirmPassword('');
-                    setChangePasswordError(null);
                   }}
                 >
                   Hủy
                 </Button>
-                <Button type="submit" disabled={isChangingPassword}>
-                  {isChangingPassword ? 'Đang cập nhật...' : 'Lưu mật khẩu mới'}
+                <Button type="submit">Lưu mật khẩu mới</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Menu Item Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Sửa món: {editingItem.name}</h3>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="p-1 rounded-full hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              className="space-y-3"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  setIsSavingEdit(true);
+                  await onUpdateMenuItem(editingItem.id, {
+                    name: editingItem.name,
+                    price: editingItem.price,
+                    description: editingItem.description,
+                    category: editingItem.category,
+                    imageUrl: editingItem.imageUrl,
+                    available: editingItem.available,
+                  });
+                  setIsSavingEdit(false);
+                  setEditingItem(null);
+                } catch (err) {
+                  setIsSavingEdit(false);
+                  alert(err instanceof Error ? err.message : 'Không thể cập nhật món');
+                }
+              }}
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tên món</label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-md p-2 text-sm"
+                  value={editingItem.name}
+                  onChange={e => setEditingItem(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Giá (VND)</label>
+                <input
+                  type="number"
+                  className="mt-1 w-full border border-gray-300 rounded-md p-2 text-sm"
+                  value={editingItem.price}
+                  onChange={e => setEditingItem(prev => prev ? { ...prev, price: Number(e.target.value) } : prev)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Danh mục</label>
+                <select
+                  className="mt-1 w-full border border-gray-300 rounded-md p-2 bg-white text-sm"
+                  value={editingItem.category}
+                  onChange={e => setEditingItem(prev => prev ? { ...prev, category: e.target.value } : prev)}
+                >
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mô tả</label>
+                <textarea
+                  rows={3}
+                  className="mt-1 w-full border border-gray-300 rounded-md p-2 text-sm"
+                  value={editingItem.description}
+                  onChange={e => setEditingItem(prev => prev ? { ...prev, description: e.target.value } : prev)}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={editingItem.available}
+                    onChange={e => setEditingItem(prev => prev ? { ...prev, available: e.target.checked } : prev)}
+                  />
+                  <span>Còn bán</span>
+                </label>
+                {editingItem.imageUrl && (
+                  <img
+                    src={editingItem.imageUrl}
+                    alt="Ảnh món"
+                    className="w-16 h-12 object-cover rounded border"
+                  />
+                )}
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setEditingItem(null)}
+                >
+                  Hủy
+                </Button>
+                <Button type="submit" disabled={isSavingEdit}>
+                  {isSavingEdit ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </Button>
               </div>
             </form>

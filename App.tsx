@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { initialMenu, initialOrders } from './services/mockData';
+import { initialOrders } from './services/mockData';
 import { CartItem, MenuItem, Order, OrderStatus, Restaurant, Role, NewRestaurantPayload, RestaurantStatus } from './types';
 import { Login } from './components/Login';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
@@ -13,7 +13,7 @@ const AUTH_TOKEN_KEY = 'qr_food_order_token';
 const App: React.FC = () => {
   // Central State
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenu);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   
   // Session State
@@ -23,6 +23,34 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string>('');
   const [resetToken, setResetToken] = useState<string | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+
+  // Khôi phục trạng thái đăng nhập từ JWT trong localStorage (nếu có)
+  useEffect(() => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return;
+
+    try {
+      const [, payloadBase64] = token.split('.');
+      if (!payloadBase64) throw new Error('Invalid token');
+
+      const normalized = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+      const payloadJson = atob(normalized);
+      const payload: { role?: string; restaurantId?: string | null } = JSON.parse(payloadJson);
+
+      if (payload.role === Role.SUPER_ADMIN) {
+        setRole(Role.SUPER_ADMIN);
+        setCurrentRestaurantId(null);
+      } else if (payload.role === Role.RESTAURANT_ADMIN && payload.restaurantId) {
+        setRole(Role.RESTAURANT_ADMIN);
+        setCurrentRestaurantId(payload.restaurantId);
+      } else {
+        // Token không hợp lệ cho app này
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+      }
+    } catch {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }, []);
 
   // "Routing" based on Hash for the demo
   useEffect(() => {
@@ -153,6 +181,50 @@ const App: React.FC = () => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
+
+  // Load menu items when restaurant context changes (restaurant admin hoặc customer)
+  useEffect(() => {
+    if (!currentRestaurantId) {
+      setMenuItems([]);
+      return;
+    }
+
+    const fetchMenu = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/menu?restaurantId=${currentRestaurantId}`);
+        if (!res.ok) {
+          setMenuItems([]);
+          return;
+        }
+        const data: {
+          _id: string;
+          restaurantId: string;
+          name: string;
+          description: string;
+          price: number;
+          category: string;
+          imageUrl: string;
+          available: boolean;
+        }[] = await res.json();
+        const mapped: MenuItem[] = data.map(m => ({
+          id: m._id,
+          restaurantId: m.restaurantId,
+          name: m.name,
+          description: m.description,
+          price: m.price,
+          category: m.category,
+          imageUrl: m.imageUrl,
+          available: m.available
+        }));
+        setMenuItems(mapped);
+      } catch (err) {
+        console.error('Không thể tải menu từ server', err);
+        setMenuItems([]);
+      }
+    };
+
+    fetchMenu();
+  }, [currentRestaurantId]);
 
   // Actions
   const handleLogin = async (identifier: string, password: string) => {
@@ -361,27 +433,28 @@ const App: React.FC = () => {
     }
   };
 
-  const resetRestaurantPassword = async (id: string, newPassword: string) => {
+  const resetRestaurantPassword = async (restaurantId: string, newPassword: string) => {
     try {
-      if (!newPassword) {
-        throw new Error('Vui lòng nhập mật khẩu mới');
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại để thao tác.');
       }
-      const res = await fetch(`${API_BASE_URL}/api/restaurants/${id}/reset-password`, {
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${restaurantId}/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders()
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ newPassword })
       });
+      const body = await res.json().catch(() => null);
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
         throw new Error(body?.message || 'Không thể đặt lại mật khẩu');
       }
-      alert('Đã đặt lại mật khẩu cho admin nhà hàng.');
+      return body;
     } catch (e) {
       console.error(e);
-      alert(e instanceof Error ? e.message : 'Không thể đặt lại mật khẩu');
+      throw e;
     }
   };
 
@@ -412,17 +485,116 @@ const App: React.FC = () => {
     }
   };
 
-  const addMenuItem = (data: Omit<MenuItem, 'id'>) => {
-    const newItem: MenuItem = {
-      ...data,
-      id: `menu_${Date.now()}`
-    };
-    setMenuItems([...menuItems, newItem]);
+  const addMenuItem = async (data: Omit<MenuItem, 'id'>) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Vui lòng đăng nhập lại.');
+
+      const res = await fetch(`${API_BASE_URL}/api/menu`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: data.name,
+          description: data.description,
+          price: data.price,
+          category: data.category,
+          imageUrl: data.imageUrl,
+          available: data.available
+        })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể thêm món');
+      }
+
+      const created: {
+        _id: string;
+        restaurantId: string;
+        name: string;
+        description: string;
+        price: number;
+        category: string;
+        imageUrl: string;
+        available: boolean;
+      } = body;
+
+      const mapped: MenuItem = {
+        id: created._id,
+        restaurantId: created.restaurantId,
+        name: created.name,
+        description: created.description,
+        price: created.price,
+        category: created.category,
+        imageUrl: created.imageUrl,
+        available: created.available
+      };
+
+      setMenuItems(prev => [mapped, ...prev]);
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+>>>>>>> 7da6fa164feb9be47b98e8bcd5f021aa8ec84cf9
   };
 
-  const deleteMenuItem = (id: string) => {
-    setMenuItems(menuItems.filter(m => m.id !== id));
-  }
+  const deleteMenuItem = async (id: string) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Vui lòng đăng nhập lại.');
+      const res = await fetch(`${API_BASE_URL}/api/menu/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể xóa món');
+      }
+      setMenuItems(prev => prev.filter(m => m.id !== id));
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
+  const updateMenuItem = async (id: string, data: Partial<MenuItem>) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) throw new Error('Vui lòng đăng nhập lại.');
+      const res = await fetch(`${API_BASE_URL}/api/menu/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể cập nhật món');
+      }
+      const updated: MenuItem = {
+        id: body._id,
+        restaurantId: body.restaurantId,
+        name: body.name,
+        description: body.description,
+        price: body.price,
+        category: body.category,
+        imageUrl: body.imageUrl,
+        available: body.available
+      };
+      setMenuItems(prev =>
+        prev.map(m => (m.id === id ? updated : m))
+      );
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
     setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
@@ -489,7 +661,7 @@ const App: React.FC = () => {
         restaurants={restaurants}
         onAddRestaurant={addRestaurant}
         onToggleActive={toggleRestaurantStatus}
-        onResetPassword={resetRestaurantPassword}
+        onResetRestaurantPassword={resetRestaurantPassword}
         onUpdateRestaurant={updateRestaurantDetails}
         onLogout={handleLogout}
       />
@@ -509,6 +681,7 @@ const App: React.FC = () => {
         menu={myMenu}
         orders={myOrders}
         onAddMenuItem={addMenuItem}
+        onUpdateMenuItem={updateMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
         onDeleteMenuItem={deleteMenuItem}
         onChangePassword={changeOwnPassword}
