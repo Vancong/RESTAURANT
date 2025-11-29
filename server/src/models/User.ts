@@ -12,6 +12,8 @@ export interface IUser extends Document {
   role: UserRole;
   restaurantId?: Types.ObjectId;
   isActive?: boolean;
+  name?: string; // Tên nhân viên
+  updatedBy?: Types.ObjectId; // Admin nào tạo/cập nhật
 }
 
 const UserSchema = new Schema<IUser>(
@@ -38,6 +40,14 @@ const UserSchema = new Schema<IUser>(
     isActive: {
       type: Boolean,
       default: true
+    },
+    name: {
+      type: String,
+      trim: true
+    },
+    updatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User"
     }
   },
   { timestamps: true }

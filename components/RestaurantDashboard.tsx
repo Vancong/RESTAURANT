@@ -41,13 +41,15 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [staffList, setStaffList] = useState<{ id: string; username: string; isActive: boolean }[]>([]);
+  const [staffList, setStaffList] = useState<{ id: string; username: string; name: string; isActive: boolean; updatedBy: { id: string; username: string } | null }[]>([]);
   const [newStaffUsername, setNewStaffUsername] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [newStaffName, setNewStaffName] = useState('');
   const [isCreatingStaff, setIsCreatingStaff] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<{ id: string; username: string } | null>(null);
+  const [editingStaff, setEditingStaff] = useState<{ id: string; username: string; name: string } | null>(null);
   const [editStaffUsername, setEditStaffUsername] = useState('');
   const [editStaffPassword, setEditStaffPassword] = useState('');
+  const [editStaffName, setEditStaffName] = useState('');
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
 
@@ -206,7 +208,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
         }
       });
       if (!res.ok) return;
-      const data: { id: string; username: string; isActive: boolean }[] = await res.json();
+      const data: { id: string; username: string; name: string; isActive: boolean; updatedBy: { id: string; username: string } | null }[] = await res.json();
       setStaffList(data);
     } catch (err) {
       console.error('Không thể tải danh sách nhân viên', err);
@@ -657,7 +659,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 <Users className="w-5 h-5 mr-2 text-brand-600" /> Tạo tài khoản nhân viên
               </h3>
               <form
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                className="grid grid-cols-1 md:grid-cols-3 gap-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (!newStaffUsername || !newStaffPassword) {
@@ -678,7 +680,8 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                       },
                       body: JSON.stringify({
                         username: newStaffUsername.trim(),
-                        password: newStaffPassword
+                        password: newStaffPassword,
+                        name: newStaffName.trim()
                       })
                     });
                     const body = await res.json().catch(() => null);
@@ -688,6 +691,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     alert('Đã tạo tài khoản nhân viên thành công!');
                     setNewStaffUsername('');
                     setNewStaffPassword('');
+                    setNewStaffName('');
                     // Refresh danh sách nhân viên
                     await fetchStaff();
                   } catch (err) {
@@ -697,6 +701,16 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   }
                 }}
               >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Tên nhân viên</label>
+                  <input
+                    type="text"
+                    className="mt-1 w-full border border-gray-300 rounded-md p-2"
+                    value={newStaffName}
+                    onChange={e => setNewStaffName(e.target.value)}
+                    placeholder="VD: Nguyễn Văn A"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Username</label>
                   <input
@@ -719,7 +733,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     placeholder="Mật khẩu"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div className="md:col-span-3">
                   <Button type="submit" disabled={isCreatingStaff}>
                     {isCreatingStaff ? 'Đang tạo...' : 'Tạo nhân viên'}
                   </Button>
@@ -737,75 +751,88 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   {staffList.map(staff => (
                     <div
                       key={staff.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                      className={`p-3 rounded-lg border ${
                         staff.isActive ? 'bg-gray-50 border-gray-200' : 'bg-red-50 border-red-200'
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="font-medium">{staff.username}</span>
-                        {staff.isActive ? (
-                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
-                            Đang hoạt động
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium">
-                            Đã khóa
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setEditingStaff({ id: staff.id, username: staff.username });
-                            setEditStaffUsername(staff.username);
-                            setEditStaffPassword('');
-                          }}
-                          title="Chỉnh sửa"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={staff.isActive ? "danger" : "secondary"}
-                          onClick={async () => {
-                            try {
-                              setTogglingStaffId(staff.id);
-                              const token = localStorage.getItem(AUTH_TOKEN_KEY);
-                              if (!token) {
-                                throw new Error('Vui lòng đăng nhập lại');
-                              }
-                              const res = await fetch(`${API_BASE_URL}/api/staff/${staff.id}/toggle-active`, {
-                                method: 'PATCH',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  Authorization: `Bearer ${token}`
-                                }
-                              });
-                              const body = await res.json().catch(() => null);
-                              if (!res.ok) {
-                                throw new Error(body?.message || 'Không thể cập nhật trạng thái');
-                              }
-                              await fetchStaff();
-                            } catch (err) {
-                              alert(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái');
-                            } finally {
-                              setTogglingStaffId(null);
-                            }
-                          }}
-                          disabled={togglingStaffId === staff.id}
-                          title={staff.isActive ? "Khóa nhân viên" : "Mở khóa nhân viên"}
-                        >
-                          {togglingStaffId === staff.id ? (
-                            '...'
-                          ) : staff.isActive ? (
-                            <Ban className="w-4 h-4" />
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-3">
+                          <div>
+                            <span className="font-medium text-gray-900">{staff.name || staff.username}</span>
+                            {staff.name && (
+                              <span className="ml-2 text-sm text-gray-500">({staff.username})</span>
+                            )}
+                          </div>
+                          {staff.isActive ? (
+                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                              Đang hoạt động
+                            </span>
                           ) : (
-                            <CheckCircle className="w-4 h-4" />
+                            <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium">
+                              Đã khóa
+                            </span>
                           )}
-                        </Button>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setEditingStaff({ id: staff.id, username: staff.username, name: staff.name });
+                              setEditStaffUsername(staff.username);
+                              setEditStaffName(staff.name);
+                              setEditStaffPassword('');
+                            }}
+                            title="Chỉnh sửa"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={staff.isActive ? "danger" : "secondary"}
+                            onClick={async () => {
+                              try {
+                                setTogglingStaffId(staff.id);
+                                const token = localStorage.getItem(AUTH_TOKEN_KEY);
+                                if (!token) {
+                                  throw new Error('Vui lòng đăng nhập lại');
+                                }
+                                const res = await fetch(`${API_BASE_URL}/api/staff/${staff.id}/toggle-active`, {
+                                  method: 'PATCH',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`
+                                  }
+                                });
+                                const body = await res.json().catch(() => null);
+                                if (!res.ok) {
+                                  throw new Error(body?.message || 'Không thể cập nhật trạng thái');
+                                }
+                                await fetchStaff();
+                              } catch (err) {
+                                alert(err instanceof Error ? err.message : 'Không thể cập nhật trạng thái');
+                              } finally {
+                                setTogglingStaffId(null);
+                              }
+                            }}
+                            disabled={togglingStaffId === staff.id}
+                            title={staff.isActive ? "Khóa nhân viên" : "Mở khóa nhân viên"}
+                          >
+                            {togglingStaffId === staff.id ? (
+                              '...'
+                            ) : staff.isActive ? (
+                              <Ban className="w-4 h-4" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
+                      {staff.updatedBy && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Cập nhật bởi: <span className="font-medium">{staff.updatedBy.username}</span>
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -936,6 +963,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   setEditingStaff(null);
                   setEditStaffUsername('');
                   setEditStaffPassword('');
+                  setEditStaffName('');
                 }}
                 className="p-1 rounded-full hover:bg-gray-100"
               >
@@ -961,8 +989,9 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   if (!token) {
                     throw new Error('Vui lòng đăng nhập lại');
                   }
-                  const body: { username?: string; password?: string } = {
-                    username: editStaffUsername.trim()
+                  const body: { username?: string; password?: string; name?: string } = {
+                    username: editStaffUsername.trim(),
+                    name: editStaffName.trim()
                   };
                   if (editStaffPassword) {
                     body.password = editStaffPassword;
@@ -983,6 +1012,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   setEditingStaff(null);
                   setEditStaffUsername('');
                   setEditStaffPassword('');
+                  setEditStaffName('');
                   await fetchStaff();
                 } catch (err) {
                   alert(err instanceof Error ? err.message : 'Không thể cập nhật nhân viên');
@@ -991,6 +1021,18 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                 }
               }}
             >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tên nhân viên
+                </label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  value={editStaffName}
+                  onChange={(e) => setEditStaffName(e.target.value)}
+                  placeholder="VD: Nguyễn Văn A"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Username
@@ -1025,6 +1067,7 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                     setEditingStaff(null);
                     setEditStaffUsername('');
                     setEditStaffPassword('');
+                    setEditStaffName('');
                   }}
                 >
                   Hủy
