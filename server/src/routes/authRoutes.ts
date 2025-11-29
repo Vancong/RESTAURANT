@@ -17,10 +17,24 @@ router.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ message: "Thiếu username hoặc password" });
+    return res.status(400).json({ message: "Thiếu tên đăng nhập/email hoặc mật khẩu" });
   }
 
-  const user = await User.findOne({ username });
+  let user = await User.findOne({ username: username.trim() });
+
+  // Nếu không tìm thấy user theo username, thử tìm theo email của restaurant
+  if (!user) {
+    const normalizedEmail = username.trim().toLowerCase();
+    const restaurant = await Restaurant.findOne({ email: normalizedEmail });
+    
+    if (restaurant) {
+      // Tìm user admin của restaurant này
+      user = await User.findOne({
+        restaurantId: restaurant._id,
+        role: UserRole.RESTAURANT_ADMIN
+      });
+    }
+  }
 
   if (!user) {
     return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });

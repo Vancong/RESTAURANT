@@ -600,6 +600,119 @@ const App: React.FC = () => {
       throw e;
     }
   };
+
+  const updateRestaurant = async (data: Partial<Restaurant>) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại.');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/me`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: data.name,
+          ownerName: data.ownerName,
+          email: data.email,
+          address: data.address,
+          phone: data.phone
+        })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể cập nhật thông tin nhà hàng');
+      }
+      const updated: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+      } = body;
+      const mapped: Restaurant = {
+        id: updated._id,
+        name: updated.name,
+        username: updated.username,
+        ownerName: updated.ownerName,
+        email: updated.email,
+        address: updated.address,
+        phone: updated.phone,
+        status: updated.status,
+        active: updated.active
+      };
+      setRestaurants(prev =>
+        prev.map(r => (r.id === mapped.id ? mapped : r))
+      );
+      return mapped;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+  const updateRestaurantBySuperAdmin = async (restaurantId: string, data: Partial<Restaurant>) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại.');
+      }
+      const res = await fetch(`${API_BASE_URL}/api/restaurants/${restaurantId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: data.name,
+          ownerName: data.ownerName,
+          email: data.email,
+          address: data.address,
+          phone: data.phone,
+          status: data.status
+        })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(body?.message || 'Không thể cập nhật thông tin nhà hàng');
+      }
+      const updated: {
+        _id: string;
+        name: string;
+        username: string;
+        ownerName: string;
+        email: string;
+        address: string;
+        phone: string;
+        status: RestaurantStatus;
+        active: boolean;
+      } = body;
+      const mapped: Restaurant = {
+        id: updated._id,
+        name: updated.name,
+        username: updated.username,
+        ownerName: updated.ownerName,
+        email: updated.email,
+        address: updated.address,
+        phone: updated.phone,
+        status: updated.status,
+        active: updated.active
+      };
+      setRestaurants(prev =>
+        prev.map(r => (r.id === mapped.id ? mapped : r))
+      );
+      return mapped;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   if (role === Role.SUPER_ADMIN) {
     return (
       <SuperAdminDashboard 
@@ -607,6 +720,7 @@ const App: React.FC = () => {
         onAddRestaurant={addRestaurant}
         onToggleActive={toggleRestaurantStatus}
         onResetRestaurantPassword={resetRestaurantPassword}
+        onUpdateRestaurant={updateRestaurantBySuperAdmin}
         onLogout={handleLogout}
       />
     );
@@ -628,6 +742,7 @@ const App: React.FC = () => {
         onUpdateMenuItem={updateMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
         onDeleteMenuItem={deleteMenuItem}
+        onUpdateRestaurant={updateRestaurant}
         onLogout={handleLogout}
       />
     );

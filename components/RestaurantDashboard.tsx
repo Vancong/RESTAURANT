@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Restaurant, MenuItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
 import { generateMenuDescription } from '../services/geminiService';
-import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, QrCode, LogOut, Clock, ChefHat, Trash, Sparkles, Lock, X, Plus, Users, Edit, Ban, CheckCircle, Settings } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface RestaurantDashboardProps {
@@ -13,6 +13,7 @@ interface RestaurantDashboardProps {
   onUpdateMenuItem: (id: string, data: Partial<MenuItem>) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
   onDeleteMenuItem: (id: string) => Promise<void>;
+  onUpdateRestaurant: (data: Partial<Restaurant>) => Promise<Restaurant>;
   onLogout: () => void;
 }
 
@@ -24,9 +25,10 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onUpdateMenuItem,
   onUpdateOrderStatus,
   onDeleteMenuItem,
+  onUpdateRestaurant,
   onLogout
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'menu' | 'qr' | 'stats' | 'staff' | 'settings'>('orders');
   const [newItem, setNewItem] = useState<Partial<MenuItem>>({ category: 'Món Chính', available: true });
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [qrTableInput, setQrTableInput] = useState('');
@@ -52,6 +54,28 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [editStaffName, setEditStaffName] = useState('');
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
+  const [isEditingRestaurant, setIsEditingRestaurant] = useState(false);
+  const [restaurantForm, setRestaurantForm] = useState({
+    name: restaurant.name,
+    ownerName: restaurant.ownerName,
+    email: restaurant.email,
+    address: restaurant.address,
+    phone: restaurant.phone
+  });
+  const [isSavingRestaurant, setIsSavingRestaurant] = useState(false);
+
+  // Cập nhật form khi restaurant prop thay đổi
+  useEffect(() => {
+    if (!isEditingRestaurant) {
+      setRestaurantForm({
+        name: restaurant.name,
+        ownerName: restaurant.ownerName,
+        email: restaurant.email,
+        address: restaurant.address,
+        phone: restaurant.phone
+      });
+    }
+  }, [restaurant, isEditingRestaurant]);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
@@ -311,6 +335,12 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
             className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'staff' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
           >
             <Users className="w-5 h-5 mr-3" /> Nhân viên
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg ${activeTab === 'settings' ? 'bg-brand-50 text-brand-700' : 'text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Settings className="w-5 h-5 mr-3" /> Cài đặt
           </button>
           <div className="pt-4 mt-4 border-t border-gray-100 space-y-2">
             <button
@@ -651,6 +681,190 @@ const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
                   </div>
                 )}
             </div>
+        )}
+
+        {/* SETTINGS TAB */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Thông tin nhà hàng</h2>
+            
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold flex items-center">
+                  <Settings className="w-5 h-5 mr-2 text-brand-600" /> Thông tin nhà hàng
+                </h3>
+                {!isEditingRestaurant && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsEditingRestaurant(true);
+                      setRestaurantForm({
+                        name: restaurant.name,
+                        ownerName: restaurant.ownerName,
+                        email: restaurant.email,
+                        address: restaurant.address,
+                        phone: restaurant.phone
+                      });
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" /> Sửa thông tin
+                  </Button>
+                )}
+              </div>
+
+              {isEditingRestaurant ? (
+                <form
+                  className="space-y-4"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setIsSavingRestaurant(true);
+                      await onUpdateRestaurant(restaurantForm);
+                      setIsEditingRestaurant(false);
+                      alert('Đã cập nhật thông tin nhà hàng thành công!');
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : 'Không thể cập nhật thông tin nhà hàng');
+                    } finally {
+                      setIsSavingRestaurant(false);
+                    }
+                  }}
+                >
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tên nhà hàng
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.name}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tên chủ nhà hàng
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.ownerName}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, ownerName: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.email}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, email: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Địa chỉ
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.address}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, address: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Số điện thoại
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      value={restaurantForm.phone}
+                      onChange={(e) => setRestaurantForm({ ...restaurantForm, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setIsEditingRestaurant(false);
+                        setRestaurantForm({
+                          name: restaurant.name,
+                          ownerName: restaurant.ownerName,
+                          email: restaurant.email,
+                          address: restaurant.address,
+                          phone: restaurant.phone
+                        });
+                      }}
+                    >
+                      Hủy
+                    </Button>
+                    <Button type="submit" disabled={isSavingRestaurant}>
+                      {isSavingRestaurant ? 'Đang lưu...' : 'Lưu thay đổi'}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Tên nhà hàng
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.name}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Tên chủ nhà hàng
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.ownerName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Email
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.email}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Địa chỉ
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.address}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Số điện thoại
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.phone}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Username (không thể thay đổi)
+                    </label>
+                    <p className="text-gray-900 font-medium">{restaurant.username}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Trạng thái
+                    </label>
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                      restaurant.status === 'ACTIVE' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {restaurant.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm khóa'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* STAFF TAB */}

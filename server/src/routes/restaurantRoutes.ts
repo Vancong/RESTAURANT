@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { Restaurant, RestaurantStatus } from "../models/Restaurant.js";
 import { User, UserRole } from "../models/User.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { AuthRequest, requireAuth, requireRole } from "../middleware/auth.js";
 import { sendNewRestaurantWelcomeEmail } from "../services/emailService.js";
 
 const router = Router();
@@ -108,21 +108,115 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Cập nhật nhà hàng (ví dụ toggle active)
+// Restaurant Admin cập nhật thông tin nhà hàng của mình
+router.patch(
+  "/me",
+  requireAuth,
+  requireRole([UserRole.RESTAURANT_ADMIN] as string[]),
+  async (req: AuthRequest, res) => {
+    try {
+      const restaurantId = req.auth?.restaurantId;
+      if (!restaurantId) {
+        return res.status(403).json({ message: "Không xác định được nhà hàng" });
+      }
+
+      const { name, ownerName, email, address, phone } = req.body as {
+        name?: string;
+        ownerName?: string;
+        email?: string;
+        address?: string;
+        phone?: string;
+      };
+
+      const updates: Record<string, unknown> = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (ownerName !== undefined) updates.ownerName = ownerName.trim();
+      if (email !== undefined) {
+        const normalizedEmail = email.trim().toLowerCase();
+        // Kiểm tra email có trùng với nhà hàng khác không
+        const existingRestaurant = await Restaurant.findOne({
+          email: normalizedEmail,
+          _id: { $ne: restaurantId }
+        });
+        if (existingRestaurant) {
+          return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
+        }
+        updates.email = normalizedEmail;
+      }
+      if (address !== undefined) updates.address = address.trim();
+      if (phone !== undefined) updates.phone = phone.trim();
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "Không có thông tin nào để cập nhật" });
+      }
+
+      const restaurant = await Restaurant.findByIdAndUpdate(restaurantId, updates, {
+        new: true
+      });
+
+      if (!restaurant) {
+        return res.status(404).json({ message: "Không tìm thấy nhà hàng" });
+      }
+
+      res.json(restaurant);
+    } catch (error) {
+      res.status(400).json({ message: "Không thể cập nhật thông tin nhà hàng", error });
+    }
+  }
+);
+
+// Cập nhật nhà hàng - cho Super Admin (có thể cập nhật tất cả thông tin)
 router.patch("/:id", async (req, res) => {
   try {
-    const updates: Record<string, unknown> = { ...req.body };
+    const { id } = req.params;
+    const {
+      name,
+      ownerName,
+      email,
+      address,
+      phone,
+      status,
+      active
+    } = req.body;
 
-    if (typeof updates.status === "string") {
-      if (!Object.values(RestaurantStatus).includes(updates.status as RestaurantStatus)) {
-        return res.status(400).json({ message: "Trạng thái nhà hàng không hợp lệ" });
+    const updates: Record<string, unknown> = {};
+
+    // Cập nhật thông tin cơ bản
+    if (name !== undefined) updates.name = name.trim();
+    if (ownerName !== undefined) updates.ownerName = ownerName.trim();
+    if (address !== undefined) updates.address = address.trim();
+    if (phone !== undefined) updates.phone = phone.trim();
+
+    // Cập nhật email (kiểm tra trùng lặp)
+    if (email !== undefined) {
+      const normalizedEmail = email.trim().toLowerCase();
+      const existingRestaurant = await Restaurant.findOne({
+        email: normalizedEmail,
+        _id: { $ne: id }
+      });
+      if (existingRestaurant) {
+        return res.status(400).json({ message: "Email đã được sử dụng bởi nhà hàng khác" });
       }
-      updates.active = updates.status === RestaurantStatus.ACTIVE;
-    } else if (typeof updates.active === "boolean" && updates.status === undefined) {
-      updates.status = updates.active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
+      updates.email = normalizedEmail;
     }
 
-    const restaurant = await Restaurant.findByIdAndUpdate(req.params.id, updates, {
+    // Cập nhật status và active
+    if (typeof status === "string") {
+      if (!Object.values(RestaurantStatus).includes(status as RestaurantStatus)) {
+        return res.status(400).json({ message: "Trạng thái nhà hàng không hợp lệ" });
+      }
+      updates.status = status;
+      updates.active = status === RestaurantStatus.ACTIVE;
+    } else if (typeof active === "boolean" && status === undefined) {
+      updates.active = active;
+      updates.status = active ? RestaurantStatus.ACTIVE : RestaurantStatus.INACTIVE;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "Không có thông tin nào để cập nhật" });
+    }
+
+    const restaurant = await Restaurant.findByIdAndUpdate(id, updates, {
       new: true
     });
     if (!restaurant) {
