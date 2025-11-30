@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NewRestaurantPayload, Restaurant, RestaurantStatus, OverviewStats, RestaurantRevenueStats } from '../types';
 import { Button } from './Button';
-import { Plus, Store, Power, KeyRound, Edit, X, BarChart3, List, Search, TrendingUp } from 'lucide-react';
+import { Plus, Store, Power, KeyRound, Edit, X, BarChart3, List, Search, TrendingUp, Menu } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface SuperAdminDashboardProps {
@@ -72,6 +72,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Debounced search
   useEffect(() => {
@@ -161,23 +162,104 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+          <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <Store className="w-6 h-6 text-brand-600 mr-2" />
               <span className="font-bold text-xl text-gray-900">Admin Tổng</span>
             </div>
-            <div className="flex items-center">
-              <Button variant="ghost" onClick={onLogout}>Đăng xuất</Button>
+            <div className="flex items-center gap-2">
+              {/* Menu Button - Hiển thị trên tất cả màn hình */}
+              <button
+                onClick={() => setIsMobileMenuOpen(prev => !prev)}
+                className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg p-2.5 shadow-md border border-brand-700 transition-colors flex items-center justify-center"
+                aria-label={isMobileMenuOpen ? "Đóng menu" : "Mở menu"}
+                title={isMobileMenuOpen ? "Đóng menu" : "Mở menu"}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="w-6 h-6" />
+                ) : (
+                  <Menu className="w-6 h-6" />
+                )}
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {/* Tab Navigation */}
-        <div className="px-4 sm:px-0 mb-6">
+      {/* Mobile Menu Overlay - Bắt đầu từ dưới navbar */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed top-16 inset-x-0 bottom-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Tab Menu - Hiển thị trên tất cả màn hình */}
+      <div className={`fixed top-16 left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-[45] transform transition-transform duration-300 ease-in-out ${
+        isMobileMenuOpen ? 'translate-y-0' : '-translate-y-full'
+      }`}>
+        <nav className="p-4 space-y-2">
+          <button
+            onClick={() => {
+              setActiveTab('statistics');
+              setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'statistics'
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <BarChart3 className="w-5 h-5 mr-3" />
+            Thống kê
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('revenue');
+              setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'revenue'
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <TrendingUp className="w-5 h-5 mr-3" />
+            Thống kê doanh thu
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('list');
+              setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-200 ${
+              activeTab === 'list'
+                ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <List className="w-5 h-5 mr-3" />
+            Danh sách nhà hàng
+          </button>
+          <div className="pt-2 mt-2 border-t border-gray-200">
+            <button
+              onClick={() => {
+                onLogout();
+                setIsMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 px-4">
+        {/* Desktop Tab Navigation - Ẩn khi menu mobile mở */}
+        <div className={`hidden sm:block mb-6 ${isMobileMenuOpen ? 'hidden' : ''}`}>
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
               <button
@@ -219,14 +301,14 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
         {/* Statistics Tab */}
         {activeTab === 'statistics' && (
-          <div className="px-4 sm:px-0 space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Overview Stats Cards */}
             {isLoadingStats ? (
               <div className="text-center py-8">Đang tải thống kê...</div>
             ) : overviewStats ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
                         <Store className="h-6 w-6 text-white" />
@@ -241,7 +323,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </div>
                 </div>
                 <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
+                  <div className="p-4 sm:p-5">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 bg-red-500 rounded-md p-3">
                         <Store className="h-6 w-6 text-white" />
@@ -290,7 +372,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
         {/* Revenue Tab */}
         {activeTab === 'revenue' && (
-          <div className="px-4 sm:px-0 space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="bg-white shadow overflow-hidden sm:rounded-md">
               <div className="px-4 py-5 sm:px-6">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">Thống kê doanh thu nhà hàng</h3>
@@ -326,7 +408,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </select>
                 </div>
                 {timeFilter === 'custom' && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Từ ngày</label>
                       <input
@@ -351,10 +433,10 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   <div className="text-center py-8">Đang tải thống kê...</div>
                 ) : restaurantStats ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <div className="text-sm text-gray-500">Tổng doanh thu</div>
-                        <div className="text-2xl font-bold text-gray-900">{formatCurrency(restaurantStats.totalRevenue)}</div>
+                        <div className="text-xl sm:text-2xl font-bold text-gray-900">{formatCurrency(restaurantStats.totalRevenue)}</div>
                       </div>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <div className="text-sm text-gray-500">Số đơn hàng</div>
@@ -386,7 +468,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
         {/* List Tab */}
         {activeTab === 'list' && (
-          <div className="px-4 sm:px-0 space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-800">Danh sách nhà hàng</h2>
               <Button onClick={() => setIsModalOpen(true)}>
@@ -395,8 +477,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
 
             {/* Search and Filter */}
-            <div className="bg-white shadow rounded-lg p-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white shadow rounded-lg p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
@@ -450,60 +532,64 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 ) : (
                   restaurants.map((rest) => (
                     <li key={rest.id}>
-                      <div className="px-4 py-4 sm:px-6 flex items-center justify-between hover:bg-gray-50">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                            {rest.name.charAt(0)}
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-brand-600 truncate">{rest.name}</div>
-                            <div className="flex items-center text-sm text-gray-500">
-                              <span className="mr-2">User: {rest.username}</span>
+                      <div className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex items-start sm:items-center flex-1 min-w-0">
+                            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                              {rest.name.charAt(0)}
                             </div>
-                            <p className="text-xs text-gray-500">Chủ: {rest.ownerName}</p>
-                            <p className="text-xs text-gray-500">Email: {rest.email}</p>
-                            <p className="text-xs text-gray-500">Địa chỉ: {rest.address}</p>
-                            <p className="text-xs text-gray-500">Liên hệ: {rest.phone}</p>
+                            <div className="ml-3 sm:ml-4 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="text-sm sm:text-base font-medium text-brand-600 truncate">{rest.name}</div>
+                                <span className={`px-2 py-0.5 inline-flex text-xs leading-4 font-semibold rounded-full flex-shrink-0 ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                                </span>
+                              </div>
+                              <div className="text-xs sm:text-sm text-gray-500 space-y-0.5">
+                                <p className="truncate">User: {rest.username}</p>
+                                <p className="truncate">Chủ: {rest.ownerName}</p>
+                                <p className="truncate hidden sm:block">Email: {rest.email}</p>
+                                <p className="truncate hidden sm:block">Địa chỉ: {rest.address}</p>
+                                <p className="truncate">Liên hệ: {rest.phone}</p>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${rest.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {rest.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
-                          </span>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setEditingRestaurant(rest);
-                              setEditForm({
-                                name: rest.name,
-                                ownerName: rest.ownerName,
-                                email: rest.email,
-                                address: rest.address,
-                                phone: rest.phone,
-                                status: rest.status
-                              });
-                            }}
-                            title="Sửa thông tin nhà hàng"
-                          >
-                            <Edit className="w-4 h-4 text-blue-500" />
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setResetTarget({ id: rest.id, name: rest.name })}
-                            title="Đặt lại mật khẩu admin nhà hàng"
-                          >
-                            <KeyRound className="w-4 h-4 text-indigo-500" />
-                          </Button>
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            onClick={() => onToggleActive(rest.id)}
-                            title={rest.active ? "Khóa nhà hàng" : "Mở khóa nhà hàng"}
-                          >
-                            <Power className={`w-4 h-4 ${rest.active ? 'text-red-500' : 'text-green-500'}`} />
-                          </Button>
+                          <div className="flex items-center justify-end sm:justify-start gap-2 flex-shrink-0">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setEditingRestaurant(rest);
+                                setEditForm({
+                                  name: rest.name,
+                                  ownerName: rest.ownerName,
+                                  email: rest.email,
+                                  address: rest.address,
+                                  phone: rest.phone,
+                                  status: rest.status
+                                });
+                              }}
+                              title="Sửa thông tin nhà hàng"
+                            >
+                              <Edit className="w-4 h-4 text-blue-500" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setResetTarget({ id: rest.id, name: rest.name })}
+                              title="Đặt lại mật khẩu admin nhà hàng"
+                            >
+                              <KeyRound className="w-4 h-4 text-indigo-500" />
+                            </Button>
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              onClick={() => onToggleActive(rest.id)}
+                              title={rest.active ? "Khóa nhà hàng" : "Mở khóa nhà hàng"}
+                            >
+                              <Power className={`w-4 h-4 ${rest.active ? 'text-red-500' : 'text-green-500'}`} />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </li>
