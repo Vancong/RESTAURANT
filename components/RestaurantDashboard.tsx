@@ -70,6 +70,9 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [editingStaff, setEditingStaff] = useState<{ id: string; username: string; name: string } | null>(null);
   const [editStaffUsername, setEditStaffUsername] = useState('');
   const [editStaffPassword, setEditStaffPassword] = useState('');
+  const [isDownloadingQr, setIsDownloadingQr] = useState(false);
+  const [downloadingQrTable, setDownloadingQrTable] = useState<string | null>(null);
+  const [qrDownloadProgress, setQrDownloadProgress] = useState({ current: 0, total: 0 });
   const [editStaffName, setEditStaffName] = useState('');
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
@@ -396,6 +399,179 @@ const formatDateShort = (timestamp: number): string => {
       setTables(data.map(t => ({ id: t._id, code: t.code })));
     } catch (err) {
       console.error('Không thể tải danh sách bàn', err);
+    }
+  };
+
+  // Tải ảnh QR gồm: QR + tên nhà hàng + số bàn
+  const handleDownloadQrImage = async (qrImageUrl: string, tableCode: string) => {
+    if (isDownloadingQr) return; // Tránh click nhiều lần
+    
+    setIsDownloadingQr(true);
+    setDownloadingQrTable(tableCode);
+    
+    try {
+      const img = document.createElement('img');
+      img.crossOrigin = 'anonymous';
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Không thể tải ảnh QR'));
+        img.src = qrImageUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Không thể tạo canvas');
+      }
+
+      const padding = 40;
+      const qrSize = 400;
+      const width = qrSize + padding * 2;
+      const height = qrSize + padding * 2 + 140;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      const qrX = (width - qrSize) / 2;
+      const qrY = padding;
+      ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+
+      ctx.fillStyle = '#111827';
+      ctx.textAlign = 'center';
+
+      ctx.font = 'bold 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillText(restaurant.name || 'Nhà hàng', width / 2, qrY + qrSize + 40);
+
+      ctx.font = 'bold 32px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillStyle = '#ea580c';
+      ctx.fillText(`Bàn ${tableCode}`, width / 2, qrY + qrSize + 80);
+
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = `qr-ban-${tableCode}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Delay nhỏ để người dùng thấy feedback
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      addNotification('success', '✅ Tải thành công', `Đã tải QR code cho bàn ${tableCode}`);
+    } catch (err) {
+      console.error('Lỗi khi xuất ảnh QR', err);
+      addNotification('error', '❌ Lỗi', err instanceof Error ? err.message : 'Có lỗi xảy ra khi tạo ảnh QR. Vui lòng thử lại.');
+    } finally {
+      setIsDownloadingQr(false);
+      setDownloadingQrTable(null);
+    }
+  };
+
+  // Tải tất cả QR của các bàn đã lưu
+  const handleDownloadAllQrImages = async () => {
+    if (!tables.length) {
+      addNotification('warning', '⚠️ Thông báo', 'Chưa có bàn nào để tải QR');
+      return;
+    }
+
+    if (isDownloadingQr) return; // Tránh click nhiều lần
+
+    setIsDownloadingQr(true);
+    setQrDownloadProgress({ current: 0, total: tables.length });
+
+    try {
+      const origin = window.location.origin;
+      const baseUrl = origin === 'null' ? 'http://localhost:3000' : origin;
+
+      let successCount = 0;
+
+      // Tải từng file một với delay để tránh trình duyệt chặn
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i];
+        setDownloadingQrTable(table.code);
+        setQrDownloadProgress({ current: i + 1, total: tables.length });
+        
+        const tableUrl = `${baseUrl}/#/order?r=${restaurant.id}&t=${table.code}`;
+        
+        try {
+          await new Promise<void>((resolve) => {
+            const img = document.createElement('img');
+            img.crossOrigin = 'anonymous';
+            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(tableUrl)}`;
+
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                resolve(undefined);
+                return;
+              }
+
+              const padding = 40;
+              const qrSize = 400;
+              const width = qrSize + padding * 2;
+              const height = qrSize + padding * 2 + 140;
+
+              canvas.width = width;
+              canvas.height = height;
+
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+
+              const qrX = (width - qrSize) / 2;
+              const qrY = padding;
+              ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+
+              ctx.fillStyle = '#111827';
+              ctx.textAlign = 'center';
+
+              ctx.font = 'bold 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              ctx.fillText(restaurant.name || 'Nhà hàng', width / 2, qrY + qrSize + 40);
+
+              ctx.font = 'bold 32px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+              ctx.fillStyle = '#ea580c';
+              ctx.fillText(`Bàn ${table.code}`, width / 2, qrY + qrSize + 80);
+
+              const link = document.createElement('a');
+              link.href = canvas.toDataURL('image/png');
+              link.download = `qr-ban-${table.code}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+
+              successCount++;
+
+              // Delay 400ms giữa các lần tải để trình duyệt xử lý
+              setTimeout(() => {
+                resolve(undefined);
+              }, 400);
+            };
+
+            img.onerror = () => {
+              console.error(`Không thể tải QR cho bàn ${table.code}`);
+              resolve(undefined); // Vẫn tiếp tục với bàn tiếp theo dù có lỗi
+            };
+          });
+        } catch (err) {
+          console.error(`Lỗi khi tải QR cho bàn ${table.code}:`, err);
+        }
+      }
+
+      if (successCount === tables.length) {
+        addNotification('success', '✅ Hoàn thành', `Đã tải thành công ${successCount} ảnh QR code!`);
+      } else {
+        addNotification('warning', '⚠️ Hoàn thành một phần', `Đã tải ${successCount}/${tables.length} ảnh QR. Một số file có thể gặp lỗi.`);
+      }
+    } catch (err) {
+      console.error('Lỗi khi tải QR:', err);
+      addNotification('error', '❌ Lỗi', 'Có lỗi xảy ra khi tải QR. Vui lòng thử lại.');
+    } finally {
+      setIsDownloadingQr(false);
+      setDownloadingQrTable(null);
+      setQrDownloadProgress({ current: 0, total: 0 });
     }
   };
 
@@ -2723,12 +2899,32 @@ const formatDateShort = (timestamp: number): string => {
                     </code>
                   </div>
                   
-                  <div className="bg-white p-3 border-2 border-brand-500 rounded-xl shadow-sm mb-3">
+                  <div className="bg-white p-3 border-2 border-brand-500 rounded-xl shadow-sm mb-4 flex flex-col items-center">
                     <img 
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(getOrderUrl())}`} 
                       alt={`QR Code for Table ${qrTableInput}`}
-                      className="w-48 h-48 object-contain"
+                      className="w-48 h-48 object-contain mb-3"
                     />
+                    <Button
+                      type="button"
+                      variant="primary"
+                      disabled={isDownloadingQr}
+                      onClick={() =>
+                        handleDownloadQrImage(
+                          `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(getOrderUrl())}`,
+                          qrTableInput
+                        )
+                      }
+                    >
+                      {isDownloadingQr && downloadingQrTable === qrTableInput ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang tải...
+                        </>
+                      ) : (
+                        'Tải ảnh QR để in'
+                      )}
+                    </Button>
                   </div>
                   
                   <div className="font-bold text-gray-900 text-lg">Bàn số {qrTableInput}</div>
@@ -2740,7 +2936,37 @@ const formatDateShort = (timestamp: number): string => {
             {/* Danh sách bàn đã lưu */}
             {tables.length > 0 && (
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h3 className="text-lg font-bold mb-4">Danh sách bàn đã lưu</h3>
+                <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                  <h3 className="text-lg font-bold">Danh sách bàn đã lưu</h3>
+                  <div className="flex items-center gap-3">
+                    {isDownloadingQr && qrDownloadProgress.total > 0 && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">{qrDownloadProgress.current}</span>
+                        <span className="text-gray-400"> / </span>
+                        <span>{qrDownloadProgress.total}</span>
+                        {downloadingQrTable && (
+                          <span className="ml-2 text-brand-600">Đang tải: Bàn {downloadingQrTable}</span>
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={isDownloadingQr}
+                      onClick={handleDownloadAllQrImages}
+                    >
+                      {isDownloadingQr ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang tải...
+                        </>
+                      ) : (
+                        'Tải tất cả QR'
+                      )}
+                    </Button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {tables.map(table => {
                     const origin = window.location.origin;
@@ -2821,12 +3047,33 @@ const formatDateShort = (timestamp: number): string => {
                         
                         {!isEditing && (
                           <>
-                            <div className="bg-white p-3 border border-gray-200 rounded-lg mb-3">
+                            <div className="bg-white p-3 border border-gray-200 rounded-lg mb-3 flex flex-col items-center">
                               <img
                                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tableUrl)}`}
                                 alt={`QR bàn ${table.code}`}
-                                className="w-full h-40 object-contain"
+                                className="w-full h-40 object-contain mb-3"
                               />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={isDownloadingQr}
+                                onClick={() =>
+                                  handleDownloadQrImage(
+                                    `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(tableUrl)}`,
+                                    table.code
+                                  )
+                                }
+                              >
+                                {isDownloadingQr && downloadingQrTable === table.code ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    Đang tải...
+                                  </>
+                                ) : (
+                                  'Tải ảnh QR để in'
+                                )}
+                              </Button>
                             </div>
                             <button
                               type="button"
