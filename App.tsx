@@ -8,7 +8,10 @@ import { CustomerView } from './components/CustomerView';
 import { StaffDashboard } from './components/StaffDashboard';
 import { ResetPassword } from './components/ResetPassword';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// Trong development mode, luôn dùng localhost. Chỉ dùng VITE_API_BASE_URL khi production
+const API_BASE_URL = import.meta.env.DEV 
+  ? 'http://localhost:5000' 
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000');
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
 
 const App: React.FC = () => {

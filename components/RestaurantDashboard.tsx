@@ -165,7 +165,10 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
     setBankOtpSent(false);
   }, [restaurant, isEditingRestaurant]);
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// Trong development mode, luôn dùng localhost. Chỉ dùng VITE_API_BASE_URL khi production
+const API_BASE_URL = import.meta.env.DEV 
+  ? 'http://localhost:5000' 
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000');
 const AUTH_TOKEN_KEY = 'qr_food_order_token';
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;

@@ -18,6 +18,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://congthang.netlify.app',
   process.env.FRONTEND_URL,
   process.env.VERCEL_URL,
   process.env.NETLIFY_URL,
@@ -43,7 +44,8 @@ app.use(cors({
       }
     }
     
-    callback(null, true); // Allow all for now, update after frontend deploy
+    // Allow all origins for development/testing (remove in strict production)
+    callback(null, true);
   },
   credentials: true
 }));

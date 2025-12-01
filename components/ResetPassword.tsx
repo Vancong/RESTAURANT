@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from './Button';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// Trong development mode, luôn dùng localhost. Chỉ dùng VITE_API_BASE_URL khi production
+const API_BASE_URL = import.meta.env.DEV 
+  ? 'http://localhost:5000' 
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000');
 
 interface ResetPasswordProps {
   initialToken?: string | null; // không dùng nữa, chỉ giữ để không phá props
