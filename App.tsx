@@ -188,6 +188,45 @@ const App: React.FC = () => {
     fetchMenu();
   }, [currentRestaurantId]);
 
+  // Fetch orders for customer
+  useEffect(() => {
+    if (role !== Role.CUSTOMER || !currentRestaurantId || !customerTable) {
+      return;
+    }
+
+    const fetchCustomerOrders = async () => {
+      try {
+        const url = `${API_BASE_URL}/api/orders?restaurantId=${currentRestaurantId}&tableNumber=${customerTable}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: Order[] = data.map((o: any) => ({
+          id: o._id,
+          restaurantId: o.restaurantId,
+          tableNumber: o.tableNumber,
+          items: o.items,
+          totalAmount: o.totalAmount,
+          status: o.status as OrderStatus,
+          timestamp: new Date(o.createdAt).getTime(),
+          note: o.note,
+          customerName: o.customerName
+        }));
+        setOrders(prev => {
+          // Merge với orders hiện tại, ưu tiên orders từ API cho customer
+          const otherOrders = prev.filter(o => !(o.restaurantId === currentRestaurantId && o.tableNumber === customerTable));
+          return [...otherOrders, ...mapped];
+        });
+      } catch (err) {
+        console.error('Không thể tải đơn hàng từ server', err);
+      }
+    };
+
+    fetchCustomerOrders();
+    // Refresh orders mỗi 3 giây cho customer
+    const interval = setInterval(fetchCustomerOrders, 3000);
+    return () => clearInterval(interval);
+  }, [role, currentRestaurantId, customerTable]);
+
   // Fetch orders for restaurant admin and staff
   useEffect(() => {
     if ((role !== Role.RESTAURANT_ADMIN && role !== Role.STAFF) || !currentRestaurantId) {
@@ -534,6 +573,48 @@ const App: React.FC = () => {
     }
   };
 
+  const updateOrderItems = async (orderId: string, items: CartItem[], note?: string) => {
+    try {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!token) {
+        throw new Error('Vui lòng đăng nhập lại');
+      }
+      const body: { items: CartItem[]; note?: string } = { items };
+      if (note !== undefined) {
+        body.note = note;
+      }
+      const res = await fetch(`${API_BASE_URL}/api/staff/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || 'Không thể cập nhật đơn hàng');
+      }
+      const updated = await res.json();
+      const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      setOrders(prev => prev.map(o => 
+        o.id === orderId 
+          ? { 
+              ...o, 
+              items: updated.items,
+              totalAmount,
+              note: updated.note,
+              updatedByName: updated.updatedByName
+            } 
+          : o
+      ));
+      return updated;
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  };
+
   const placeOrder = async (items: CartItem[], note: string, customerName: string) => {
     if (!currentRestaurantId || !customerTable) return;
     
@@ -852,6 +933,7 @@ const App: React.FC = () => {
         onAddMenuItem={addMenuItem}
         onUpdateMenuItem={updateMenuItem}
         onUpdateOrderStatus={updateOrderStatus}
+        onUpdateOrderItems={updateOrderItems}
         onDeleteMenuItem={deleteMenuItem}
         onUpdateRestaurant={updateRestaurant}
         onLogout={handleLogout}

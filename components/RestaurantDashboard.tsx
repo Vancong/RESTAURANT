@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStats, StatsPeriod } from '../types';
+import { Restaurant, MenuItem, Order, OrderStatus, PaymentMethod, RestaurantStats, StatsPeriod, CartItem } from '../types';
 import { Button } from './Button';
 import { Invoice } from './Invoice';
 import { ToastContainer, ToastNotification } from './Toast';
@@ -14,6 +14,7 @@ interface RestaurantDashboardProps {
   onAddMenuItem: (item: Omit<MenuItem, 'id'>) => Promise<void>;
   onUpdateMenuItem: (id: string, data: Partial<MenuItem>) => Promise<void>;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus, paymentMethod?: PaymentMethod) => void;
+  onUpdateOrderItems: (orderId: string, items: CartItem[], note?: string) => Promise<void>;
   onDeleteMenuItem: (id: string) => Promise<void>;
   onUpdateRestaurant: (data: Partial<Restaurant>) => Promise<Restaurant>;
   onLogout: () => void;
@@ -27,6 +28,7 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   onAddMenuItem,
   onUpdateMenuItem,
   onUpdateOrderStatus,
+  onUpdateOrderItems,
   onDeleteMenuItem,
   onUpdateRestaurant,
   onLogout,
@@ -55,6 +57,9 @@ export const RestaurantDashboard: React.FC<RestaurantDashboardProps> = ({
   const [isSavingMenuItem, setIsSavingMenuItem] = useState(false);
   const [deletingMenuId, setDeletingMenuId] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editingOrderItems, setEditingOrderItems] = useState<CartItem[]>([]);
+  const [editingOrderNote, setEditingOrderNote] = useState<string>('');
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [staffList, setStaffList] = useState<{ id: string; username: string; name: string; isActive: boolean; updatedBy: { id: string; username: string } | null }[]>([]);
@@ -1258,6 +1263,22 @@ const formatDateShort = (timestamp: number): string => {
                     </div>
                     
                     <div className="flex gap-2">
+                    {/* Nút sửa đơn - chỉ hiển thị khi đơn chưa hoàn thành hoặc hủy */}
+                    {(order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED) && (
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingOrderId(order.id);
+                          setEditingOrderItems([...order.items]);
+                          setEditingOrderNote(order.note || '');
+                        }}
+                        className="shadow-md"
+                      >
+                        <Edit className="w-4 h-4 mr-1.5" />
+                        Sửa đơn
+                      </Button>
+                    )}
                     {order.status === OrderStatus.PENDING && (
                         <Button 
                           size="sm" 
@@ -1601,6 +1622,159 @@ const formatDateShort = (timestamp: number): string => {
             </div>
           );
         })()}
+
+        {/* Edit Order Modal */}
+        {editingOrderId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <Edit className="w-6 h-6 mr-2 text-brand-600" />
+                  Sửa đơn hàng
+                </h2>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Món đã đặt</label>
+                  <div className="space-y-2">
+                    {editingOrderItems.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{item.name}</div>
+                            <div className="text-sm text-gray-500">{item.price.toLocaleString('vi-VN')}đ/đơn vị</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => {
+                                const newItems = [...editingOrderItems];
+                                if (newItems[idx].quantity > 1) {
+                                  newItems[idx].quantity -= 1;
+                                  setEditingOrderItems(newItems);
+                                } else {
+                                  newItems.splice(idx, 1);
+                                  setEditingOrderItems(newItems);
+                                }
+                              }}
+                              className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-lg font-bold text-gray-700 hover:bg-gray-50"
+                            >
+                              −
+                            </button>
+                            <span className="w-12 text-center font-bold">{item.quantity}</span>
+                            <button
+                              onClick={() => {
+                                const newItems = [...editingOrderItems];
+                                newItems[idx].quantity += 1;
+                                setEditingOrderItems(newItems);
+                              }}
+                              className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded-lg font-bold text-brand-600 hover:bg-gray-50"
+                            >
+                              +
+                            </button>
+                            <button
+                              onClick={() => {
+                                const newItems = editingOrderItems.filter((_, i) => i !== idx);
+                                setEditingOrderItems(newItems);
+                              }}
+                              className="ml-2 text-red-500 hover:text-red-700"
+                            >
+                              <Trash className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Thêm món mới</label>
+                    <select
+                      onChange={(e) => {
+                        const menuItemId = e.target.value;
+                        if (menuItemId && menuItemId !== '') {
+                          const menuItem = menu.find(m => m.id === menuItemId);
+                          if (menuItem && !editingOrderItems.find(i => i.menuItemId === menuItemId)) {
+                            setEditingOrderItems([...editingOrderItems, {
+                              menuItemId: menuItem.id,
+                              name: menuItem.name,
+                              price: menuItem.price,
+                              quantity: 1
+                            }]);
+                            e.target.value = ''; // Reset select
+                          }
+                        }
+                      }}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      defaultValue=""
+                    >
+                      <option value="">-- Chọn món để thêm --</option>
+                      {menu
+                        .filter(m => m.available && !editingOrderItems.find(i => i.menuItemId === m.id))
+                        .map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} - {item.price.toLocaleString('vi-VN')}đ
+                          </option>
+                        ))}
+                    </select>
+                    {menu.filter(m => m.available && !editingOrderItems.find(i => i.menuItemId === m.id)).length === 0 && (
+                      <p className="mt-2 text-sm text-gray-500">Đã thêm tất cả món có sẵn</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Ghi chú</label>
+                  <textarea
+                    value={editingOrderNote}
+                    onChange={(e) => setEditingOrderNote(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    rows={3}
+                    placeholder="Ghi chú cho đơn hàng..."
+                  />
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-semibold text-gray-700">Tổng tiền:</span>
+                    <span className="text-2xl font-bold text-brand-600">
+                      {editingOrderItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setEditingOrderId(null);
+                    setEditingOrderItems([]);
+                    setEditingOrderNote('');
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (editingOrderItems.length === 0) {
+                      alert('Đơn hàng phải có ít nhất 1 món');
+                      return;
+                    }
+                    try {
+                      await onUpdateOrderItems(editingOrderId, editingOrderItems, editingOrderNote);
+                      setEditingOrderId(null);
+                      setEditingOrderItems([]);
+                      setEditingOrderNote('');
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : 'Không thể cập nhật đơn hàng');
+                    }
+                  }}
+                  disabled={editingOrderItems.length === 0}
+                >
+                  Lưu thay đổi
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MENU TAB */}
         {activeTab === 'menu' && (

@@ -100,14 +100,15 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
   const userId = req.auth?.sub;
   const userRole = req.auth?.role;
   const { id } = req.params;
-  const { status, paymentMethod } = req.body as { status?: string; paymentMethod?: string };
+  const { status, paymentMethod, items, note } = req.body as { 
+    status?: string; 
+    paymentMethod?: string;
+    items?: Array<{ menuItemId: string; name: string; price: number; quantity: number }>;
+    note?: string;
+  };
 
   if (!restaurantId) {
     return res.status(403).json({ message: "Không xác định được nhà hàng" });
-  }
-
-  if (!status || !Object.values(OrderStatus).includes(status as OrderStatus)) {
-    return res.status(400).json({ message: "Trạng thái đơn hàng không hợp lệ" });
   }
 
   // Kiểm tra đơn hàng tồn tại và lấy trạng thái hiện tại
@@ -116,13 +117,40 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
     return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
   }
 
-  // Nhân viên (STAFF) chỉ được phép xác nhận đơn (PENDING -> CONFIRMED)
-  if (userRole === UserRole.STAFF) {
-    if (status !== OrderStatus.CONFIRMED) {
-      return res.status(403).json({ message: "Nhân viên chỉ được phép xác nhận đơn hàng" });
+  // Nếu có items, cập nhật items (chỉ admin mới được sửa)
+  if (items && Array.isArray(items)) {
+    if (userRole !== UserRole.RESTAURANT_ADMIN) {
+      return res.status(403).json({ message: "Chỉ admin nhà hàng mới được sửa món trong đơn hàng" });
     }
-    if (existingOrder.status !== OrderStatus.PENDING) {
-      return res.status(403).json({ message: "Chỉ có thể xác nhận đơn hàng đang chờ xử lý" });
+    // Không cho sửa nếu đơn đã hoàn thành hoặc đã hủy
+    if (existingOrder.status === OrderStatus.COMPLETED || existingOrder.status === OrderStatus.CANCELLED) {
+      return res.status(400).json({ message: "Không thể sửa đơn hàng đã hoàn thành hoặc đã hủy" });
+    }
+    // Validate items
+    if (items.length === 0) {
+      return res.status(400).json({ message: "Đơn hàng phải có ít nhất 1 món" });
+    }
+    for (const item of items) {
+      if (!item.menuItemId || !item.name || typeof item.price !== 'number' || typeof item.quantity !== 'number' || item.quantity <= 0) {
+        return res.status(400).json({ message: "Thông tin món không hợp lệ" });
+      }
+    }
+  }
+
+  // Nếu có status, validate và kiểm tra quyền
+  if (status) {
+    if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
+      return res.status(400).json({ message: "Trạng thái đơn hàng không hợp lệ" });
+    }
+
+    // Nhân viên (STAFF) chỉ được phép xác nhận đơn (PENDING -> CONFIRMED)
+    if (userRole === UserRole.STAFF) {
+      if (status !== OrderStatus.CONFIRMED) {
+        return res.status(403).json({ message: "Nhân viên chỉ được phép xác nhận đơn hàng" });
+      }
+      if (existingOrder.status !== OrderStatus.PENDING) {
+        return res.status(403).json({ message: "Chỉ có thể xác nhận đơn hàng đang chờ xử lý" });
+      }
     }
   }
 
@@ -141,7 +169,24 @@ router.patch("/orders/:id", requireAuth, requireRole([UserRole.STAFF, UserRole.R
     }
   }
 
-  const updateData: any = { status: status as OrderStatus };
+  const updateData: any = {};
+  
+  // Cập nhật status nếu có
+  if (status) {
+    updateData.status = status as OrderStatus;
+  }
+  
+  // Cập nhật items nếu có
+  if (items && Array.isArray(items)) {
+    updateData.items = items;
+    // Tính lại totalAmount
+    updateData.totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }
+  
+  // Cập nhật note nếu có
+  if (note !== undefined) {
+    updateData.note = note?.trim() || "";
+  }
   
   // Lưu hình thức thanh toán khi hoàn thành đơn hàng
   if (status === OrderStatus.COMPLETED && paymentMethod) {

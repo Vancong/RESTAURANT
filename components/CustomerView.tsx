@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { MenuItem, Restaurant, CartItem, Order, OrderStatus } from '../types';
 import { Button } from './Button';
-import { ShoppingBag, X, ChefHat, Sparkles, Clock, MapPin, QrCode, Plus, ChevronRight, Phone } from 'lucide-react';
+import { ShoppingBag, X, ChefHat, Sparkles, Clock, MapPin, QrCode, Plus, ChevronRight, Phone, Receipt, CheckCircle2, XCircle } from 'lucide-react';
 import { suggestChefRecommendation } from '../services/geminiService';
 import { ToastContainer, ToastNotification } from './Toast';
 
@@ -120,8 +120,11 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
     }
   };
 
-  // Group existing orders by status
+  // Group existing orders by status - chỉ hiển thị đơn chưa thanh toán
   const pendingOrders = existingOrders.filter(o => o.status !== OrderStatus.COMPLETED && o.status !== OrderStatus.CANCELLED);
+  const activeOrders = existingOrders.filter(o => o.status !== OrderStatus.COMPLETED && o.status !== OrderStatus.CANCELLED)
+    .sort((a, b) => b.timestamp - a.timestamp); // Sắp xếp mới nhất trước
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
 
   // Group menu by category for section headers
   const menuByCategory = useMemo(() => {
@@ -152,12 +155,23 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
           {/* Tên nhà hàng và badge đơn hàng */}
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{restaurant.name}</h1>
-            {pendingOrders.length > 0 && (
-              <div className="bg-[#F97316] text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center shadow-md">
-                <Clock className="w-3.5 h-3.5 mr-1.5" />
-                {pendingOrders.length} đơn
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {pendingOrders.length > 0 && (
+                <div className="bg-[#F97316] text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center shadow-md">
+                  <Clock className="w-3.5 h-3.5 mr-1.5" />
+                  {pendingOrders.length} đơn
+                </div>
+              )}
+              {activeOrders.length > 0 && (
+                <button
+                  onClick={() => setShowOrderHistory(!showOrderHistory)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-colors"
+                >
+                  <Receipt className="w-3.5 h-3.5 mr-1.5" />
+                  {showOrderHistory ? 'Ẩn' : 'Xem'} đơn hàng
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Thông tin nhà hàng - Responsive grid */}
@@ -189,6 +203,108 @@ export const CustomerView: React.FC<CustomerViewProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Order History Section - Chỉ hiển thị đơn chưa thanh toán */}
+      {showOrderHistory && activeOrders.length > 0 && (
+        <div className="max-w-4xl mx-auto px-4 mt-4 mb-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <Receipt className="w-5 h-5 mr-2 text-[#F97316]" />
+              Lịch sử đơn hàng của bạn
+            </h2>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {activeOrders.map(order => {
+                const getStatusIcon = () => {
+                  switch (order.status) {
+                    case OrderStatus.PENDING:
+                      return <Clock className="w-4 h-4 text-yellow-500" />;
+                    case OrderStatus.CONFIRMED:
+                      return <CheckCircle2 className="w-4 h-4 text-blue-500" />;
+                    case OrderStatus.SERVED:
+                      return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+                    case OrderStatus.COMPLETED:
+                      return <CheckCircle2 className="w-4 h-4 text-gray-500" />;
+                    case OrderStatus.CANCELLED:
+                      return <XCircle className="w-4 h-4 text-red-500" />;
+                    default:
+                      return <Clock className="w-4 h-4 text-gray-400" />;
+                  }
+                };
+                
+                const getStatusText = () => {
+                  switch (order.status) {
+                    case OrderStatus.PENDING:
+                      return 'Đang chờ';
+                    case OrderStatus.CONFIRMED:
+                      return 'Đã xác nhận';
+                    case OrderStatus.SERVED:
+                      return 'Đã ra món';
+                    case OrderStatus.COMPLETED:
+                      return 'Đã thanh toán';
+                    case OrderStatus.CANCELLED:
+                      return 'Đã hủy';
+                    default:
+                      return order.status;
+                  }
+                };
+
+                const getStatusColor = () => {
+                  switch (order.status) {
+                    case OrderStatus.PENDING:
+                      return 'bg-yellow-100 text-yellow-800';
+                    case OrderStatus.CONFIRMED:
+                      return 'bg-blue-100 text-blue-800';
+                    case OrderStatus.SERVED:
+                      return 'bg-green-100 text-green-800';
+                    case OrderStatus.COMPLETED:
+                      return 'bg-gray-100 text-gray-800';
+                    case OrderStatus.CANCELLED:
+                      return 'bg-red-100 text-red-800';
+                    default:
+                      return 'bg-gray-100 text-gray-800';
+                  }
+                };
+
+                return (
+                  <div key={order.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon()}
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${getStatusColor()}`}>
+                          {getStatusText()}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(order.timestamp).toLocaleString('vi-VN')}
+                        </span>
+                      </div>
+                      <span className="font-bold text-[#F97316]">
+                        {order.totalAmount.toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                    <ul className="text-sm text-gray-600 space-y-1">
+                      {order.items.map((item, idx) => (
+                        <li key={idx} className="flex justify-between">
+                          <span>
+                            {item.quantity}x {item.name}
+                          </span>
+                          <span className="text-gray-500">
+                            {(item.price * item.quantity).toLocaleString('vi-VN')}đ
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {order.note && (
+                      <p className="text-xs text-gray-500 mt-2 italic">
+                        Ghi chú: {order.note}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Categories Scroller - Active màu cam, Inactive trắng */}
       <div className="max-w-4xl mx-auto px-4 mt-3 mb-2">
